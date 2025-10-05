@@ -1,0 +1,211 @@
+# GDPR RAG System Configuration
+
+# Ollama Settings
+ollama:
+  base_url: "http://localhost:11434"
+  model: "gpt-oss:latest"  # High-quality open source GPT model
+  embedding_model: "nomic-embed-text:latest"  # Specialized embedding model
+  temperature: 0.05  # Very low to reduce creativity/hallucination (was 0.1)
+  top_k: 20  # Reduced from 40 to focus on most likely tokens
+  top_p: 0.85  # Reduced from 0.9 for more focused responses
+  num_ctx: 8192  # Larger context window for better understanding
+  repeat_penalty: 1.1  # Penalize repetition
+  presence_penalty: 0.0  # No penalty for new topics
+  frequency_penalty: 0.0  # No penalty for word frequency
+
+# Embedding Settings
+embeddings:
+  model_name: "sentence-transformers/all-mpnet-base-v2"  # Higher quality embeddings (768-dim)
+  # Alternative: "sentence-transformers/all-MiniLM-L6-v2" for speed (384-dim)
+  # Alternative: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2" for multilingual
+  device: "cpu"  # Change to "cuda" if GPU available
+  batch_size: 16  # Reduced for larger model
+  normalize_embeddings: true  # Better similarity scoring
+
+# FAISS Settings
+faiss:
+  index_type: "HNSW"  # Options: "Flat", "HNSW", "IVF"
+  dimension: 384  # Must match embedding model dimension
+  hnsw_m: 32
+  hnsw_ef_construction: 200
+  hnsw_ef_search: 128
+  store_path: "vectorstore/gdpr_faiss_index"
+
+# Data Collection Sources
+data_sources:
+  eur_lex:
+    enabled: true
+    url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32016R0679"
+    languages: ["EN", "DE", "FR", "ES", "IT"]  # Add more as needed
+  
+  edpb_guidelines:
+    enabled: true
+    base_url: "https://www.edpb.europa.eu/our-work-tools/our-documents/guidelines_en"
+  
+  edpb_sme_guide:
+    enabled: true
+    url: "https://www.edpb.europa.eu/sme-data-protection-guide_en"
+  
+  gdprhub:
+    enabled: true
+    url: "https://gdprhub.eu"
+    case_law: true
+  
+  cjeu:
+    enabled: true
+    url: "https://curia.europa.eu"
+  
+  dataskydd:
+    enabled: true
+    url: "https://www.dataskydd.net/gdpr"
+
+# Text Processing - Optimized for Quality
+text_processing:
+  chunk_size: 800  # Smaller chunks for more precise retrieval
+  chunk_overlap: 150  # 18.75% overlap for better context
+  preserve_structure: true  # Keep article/recital structure
+  min_chunk_size: 200  # Increased minimum for meaningful context
+  max_chunk_size: 1200  # Maximum to prevent overly long chunks
+  
+  # Advanced chunking
+  smart_splitting: true  # Split at sentence boundaries
+  remove_extra_whitespace: true
+  preserve_formatting: true
+  
+  # Language-specific settings
+  languages:
+    - en
+    - de
+    - fr
+    - es
+    - it
+
+# Retrieval Settings - Optimized for Quality
+retrieval:
+  top_k: 7  # Retrieve more documents for better context
+  score_threshold: 0.45  # Slightly lower for better recall
+  rerank: true  # Apply reranking for better results
+  diversity_penalty: 0.3  # Penalize very similar documents
+  max_tokens_context: 4000  # Maximum tokens to send to LLM
+  
+  # Metadata filters
+  filter_by:
+    - source_type
+    - language
+    - article_number
+    - violation_category
+
+# Risk Assessment
+risk_assessment:
+  categories:
+    - "Data Subject Rights"
+    - "Data Processing Principles"
+    - "Legal Basis"
+    - "Data Protection Officer"
+    - "Data Breach Notification"
+    - "Cross-Border Transfer"
+    - "Consent Management"
+    - "Privacy by Design"
+    - "Records of Processing"
+    - "Impact Assessment"
+  
+  severity_levels:
+    - "Critical"
+    - "High"
+    - "Medium"
+    - "Low"
+    - "Informational"
+
+# Prompts - Enhanced for Accuracy and Anti-Hallucination
+prompts:
+  system_prompt: |
+    You are an expert GDPR compliance advisor with comprehensive knowledge of EU data protection law.
+    Your role is to provide accurate, precise, and actionable guidance based STRICTLY on:
+    - Regulation (EU) 2016/679 (GDPR) - full text including all articles and recitals
+    - European Data Protection Board (EDPB) Guidelines and Recommendations
+    - Relevant case law from CJEU and national courts
+    - Data protection best practices
+    
+    CRITICAL RULES - YOU MUST FOLLOW THESE:
+    1. ONLY use information from the provided context - DO NOT make up facts, numbers, or citations
+    2. If the context doesn't contain the answer, clearly state "The provided context does not contain this information"
+    3. DO NOT invent article numbers, recital numbers, or case names
+    4. DO NOT create tables or statistics unless they are directly from the context
+    5. When citing, use EXACT references from the context (e.g., "According to the context: Article 6(1)(a)")
+    6. If uncertain about any detail, explicitly say "I'm not certain" rather than guessing
+    7. Distinguish clearly between: (a) facts from the context, (b) logical inferences, (c) general knowledge
+    
+    Response Guidelines:
+    - Structure responses clearly with sections when appropriate
+    - Use precise legal terminology while remaining accessible
+    - Provide practical recommendations when the context supports them
+    - Always acknowledge limitations in the available context
+  
+  query_prompt: |
+    Based ONLY on the following verified context from official GDPR documentation, answer the user's question.
+    
+    CONTEXT FROM GDPR DATABASE:
+    {context}
+    
+    USER QUESTION: {query}
+    
+    CRITICAL INSTRUCTIONS:
+    - Answer ONLY using information from the context above
+    - If the context doesn't fully answer the question, say so explicitly
+    - DO NOT make up facts, numbers, article references, or case names
+    - Cite specific parts of the context when making claims (e.g., "According to Recital 63 in the context...")
+    - If you need to make an inference, clearly label it as such
+    - Structure your answer clearly, but do not create elaborate tables unless the information is in the context
+    - When in doubt, say "The provided context does not contain sufficient information to answer this"
+    
+    Remember: Accuracy and honesty about limitations are more important than comprehensive-sounding answers.
+    - If the context doesn't fully answer the question, state what information is available and what might be missing
+    - Structure your answer with clear sections if covering multiple points
+    - Use examples when helpful for clarity
+    - Conclude with practical takeaways or action items when relevant
+    - Regulation (EU) 2016/679 (GDPR)
+    - EDPB Guidelines and Recommendations
+    - Relevant case law from CJEU and national courts
+    
+    Always cite specific GDPR articles and recitals when providing advice.
+    Consider both the letter and spirit of the regulation.
+  
+  violation_finder_prompt: |
+    Based on the following context from GDPR documents and case law, identify any potential
+    GDPR violations in the described scenario. For each violation:
+    1. Specify the relevant GDPR article(s)
+    2. Explain why it constitutes a violation
+    3. Assess the severity (Critical/High/Medium/Low)
+    4. Provide recommendations for remediation
+    
+    Context: {context}
+    
+    Scenario: {query}
+  
+  risk_assessment_prompt: |
+    Conduct a comprehensive GDPR risk assessment for the following scenario.
+    Analyze potential risks related to data protection principles, legal requirements,
+    and data subject rights.
+    
+    Context: {context}
+    
+    Scenario: {query}
+    
+    Provide:
+    1. Identified risks with severity levels
+    2. Relevant GDPR articles
+    3. Mitigation strategies
+    4. Compliance checklist
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/gdpr_rag.log"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
+
+# Performance
+performance:
+  cache_embeddings: true
+  cache_dir: ".cache"
+  parallel_processing: true
+  max_workers: 4
