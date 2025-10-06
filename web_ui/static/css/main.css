@@ -349,28 +349,41 @@ code, pre, .monospace {
 }
 
 .badge-critical {
-    background: rgba(239, 68, 68, 0.2);
-    color: var(--color-critical);
-    border: 1px solid var(--color-critical);
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+    background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+    color: #FFFFFF;
+    border: 2px solid #DC2626;
+    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.6), 0 0 20px rgba(220, 38, 38, 0.4);
+    font-weight: 700;
+    animation: pulseCritical 2s ease-in-out infinite;
+}
+
+@keyframes pulseCritical {
+    0%, 100% { box-shadow: 0 4px 16px rgba(220, 38, 38, 0.6), 0 0 20px rgba(220, 38, 38, 0.4); }
+    50% { box-shadow: 0 6px 20px rgba(220, 38, 38, 0.8), 0 0 30px rgba(220, 38, 38, 0.6); }
 }
 
 .badge-high {
-    background: rgba(245, 158, 11, 0.2);
-    color: var(--color-high);
-    border: 1px solid var(--color-high);
+    background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+    color: #FFFFFF;
+    border: 2px solid #DC2626;
+    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.5), 0 0 15px rgba(220, 38, 38, 0.3);
+    font-weight: 700;
 }
 
 .badge-medium {
-    background: rgba(252, 211, 77, 0.2);
-    color: var(--color-medium);
-    border: 1px solid var(--color-medium);
+    background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
+    color: #1F2937;
+    border: 2px solid #F59E0B;
+    box-shadow: 0 4px 16px rgba(251, 191, 36, 0.5), 0 0 15px rgba(251, 191, 36, 0.3);
+    font-weight: 700;
 }
 
 .badge-low {
-    background: rgba(16, 185, 129, 0.2);
-    color: var(--color-low);
-    border: 1px solid var(--color-low);
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    color: #FFFFFF;
+    border: 2px solid #059669;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.5), 0 0 15px rgba(16, 185, 129, 0.3);
+    font-weight: 700;
 }
 
 .badge-success {

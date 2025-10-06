@@ -320,10 +320,23 @@ def api_analyze():
             # Remove leading/trailing asterisks
             clean_category = clean_category.strip('*').strip()
             
+            # Clean up severity field
+            clean_severity = v_data.severity.strip()
+            clean_severity = clean_severity.replace('**', '')
+            clean_severity = clean_severity.strip('*').strip()
+            
+            # Clean up articles list
+            clean_articles = []
+            for article in v_data.articles:
+                clean_art = article.strip()
+                clean_art = clean_art.replace('**', '')
+                clean_art = clean_art.strip('*').strip()
+                clean_articles.append(clean_art)
+            
             violation_dict = {
                 'category': clean_category,
-                'severity': v_data.severity,
-                'articles': v_data.articles,
+                'severity': clean_severity,
+                'articles': clean_articles,
                 'risk_score': v_data.risk_score,
                 'evidence': v_data.evidence,
                 'recommendation': v_data.recommendation,
