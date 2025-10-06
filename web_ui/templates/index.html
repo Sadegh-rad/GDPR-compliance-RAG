@@ -1,0 +1,527 @@
+{% extends "base.html" %}
+
+{% block title %}Home - GDPR Compliance Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Hero Section - Modern & Eye-catching */
+    .hero-section {
+        position: relative;
+        text-align: center;
+        padding: 5rem 2rem 6rem;
+        background: linear-gradient(135deg, 
+            rgba(102, 178, 255, 0.05) 0%, 
+            rgba(59, 130, 246, 0.02) 50%,
+            rgba(102, 178, 255, 0.05) 100%);
+        border-radius: 24px;
+        margin-bottom: 4rem;
+        overflow: hidden;
+    }
+    
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(102, 178, 255, 0.1) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    
+    .hero-section::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    
+    .hero-content {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .hero-icon-wrapper {
+        display: inline-block;
+        position: relative;
+        margin-bottom: 2rem;
+    }
+    
+    .hero-icon {
+        font-size: 5rem;
+        background: linear-gradient(135deg, #66B2FF 0%, #3B82F6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: float 3s ease-in-out infinite;
+        filter: drop-shadow(0 10px 30px rgba(102, 178, 255, 0.3));
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-20px); }
+    }
+    
+    .hero-title {
+        font-size: 3.5rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+        line-height: 1.2;
+        background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.02em;
+    }
+    
+    .hero-subtitle {
+        font-size: 1.35rem;
+        color: var(--text-secondary);
+        margin-bottom: 3rem;
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+        line-height: 1.6;
+    }
+    
+    .cta-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1.25rem 3rem;
+        font-size: 1.125rem;
+        font-weight: 600;
+        background: linear-gradient(135deg, #66B2FF 0%, #3B82F6 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(102, 178, 255, 0.4);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        text-decoration: none;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .cta-button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    
+    .cta-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 50px rgba(102, 178, 255, 0.5);
+    }
+    
+    .cta-button:hover::before {
+        opacity: 1;
+    }
+    
+    .cta-button i,
+    .cta-button span {
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Section Headers */
+    .section-header {
+        text-align: center;
+        margin-bottom: 3.5rem;
+    }
+    
+    .section-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, var(--text-primary) 0%, #66B2FF 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .section-subtitle {
+        font-size: 1.125rem;
+        color: var(--text-secondary);
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    /* Feature Cards - 3 Column Layout */
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 4rem;
+    }
+    
+    .feature-card {
+        position: relative;
+        padding: 2.5rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+    }
+    
+    .feature-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: linear-gradient(90deg, #66B2FF, #3B82F6);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-8px);
+        border-color: rgba(102, 178, 255, 0.5);
+        box-shadow: 0 20px 60px rgba(102, 178, 255, 0.15);
+    }
+    
+    .feature-card:hover::before {
+        transform: scaleX(1);
+    }
+    
+    .feature-icon-wrapper {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, rgba(102, 178, 255, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s;
+    }
+    
+    .feature-card:hover .feature-icon-wrapper {
+        transform: scale(1.1) rotate(5deg);
+        background: linear-gradient(135deg, rgba(102, 178, 255, 0.25) 0%, rgba(59, 130, 246, 0.25) 100%);
+    }
+    
+    .feature-icon {
+        font-size: 2rem;
+        color: #66B2FF;
+    }
+    
+    .feature-title {
+        font-size: 1.35rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+    }
+    
+    .feature-description {
+        color: var(--text-secondary);
+        line-height: 1.7;
+        font-size: 0.95rem;
+    }
+    
+    /* How It Works - Improved Timeline */
+    .how-it-works {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 24px;
+        padding: 4rem 3rem;
+        margin-bottom: 4rem;
+        position: relative;
+    }
+    
+    .steps-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 3rem;
+        position: relative;
+    }
+    
+    /* Connecting line between steps */
+    .steps-container::before {
+        content: '';
+        position: absolute;
+        top: 35px;
+        left: 10%;
+        right: 10%;
+        height: 2px;
+        background: linear-gradient(90deg, 
+            transparent 0%, 
+            rgba(102, 178, 255, 0.3) 20%, 
+            rgba(102, 178, 255, 0.3) 80%, 
+            transparent 100%);
+        z-index: 0;
+    }
+    
+    .step {
+        text-align: center;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .step-number {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #66B2FF 0%, #3B82F6 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        box-shadow: 0 10px 30px rgba(102, 178, 255, 0.3);
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: white;
+        position: relative;
+        transition: all 0.3s;
+    }
+    
+    .step:hover .step-number {
+        transform: scale(1.15);
+        box-shadow: 0 15px 40px rgba(102, 178, 255, 0.5);
+    }
+    
+    .step-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+    }
+    
+    .step-description {
+        color: var(--text-secondary);
+        line-height: 1.6;
+        font-size: 0.9rem;
+    }
+    
+    /* Benefits Section */
+    .benefits-section {
+        margin-bottom: 4rem;
+    }
+    
+    .benefits-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 2rem;
+    }
+    
+    .benefit-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.25rem;
+        padding: 1.75rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        transition: all 0.3s;
+    }
+    
+    .benefit-item:hover {
+        border-color: rgba(102, 178, 255, 0.5);
+        transform: translateX(8px);
+    }
+    
+    .benefit-icon {
+        flex-shrink: 0;
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, rgba(102, 178, 255, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: #66B2FF;
+    }
+    
+    .benefit-content h4 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text-primary);
+    }
+    
+    .benefit-content p {
+        color: var(--text-secondary);
+        line-height: 1.6;
+        font-size: 0.9rem;
+        margin: 0;
+    }
+    
+    /* Final CTA Section */
+    .final-cta {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: linear-gradient(135deg, 
+            rgba(102, 178, 255, 0.08) 0%, 
+            rgba(59, 130, 246, 0.05) 100%);
+        border-radius: 24px;
+        border: 1px solid rgba(102, 178, 255, 0.2);
+    }
+    
+    .final-cta h2 {
+        font-size: 2.25rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+    }
+    
+    .final-cta p {
+        font-size: 1.125rem;
+        color: var(--text-secondary);
+        margin-bottom: 2.5rem;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .hero-title {
+            font-size: 2.5rem;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.125rem;
+        }
+        
+        .section-title {
+            font-size: 2rem;
+        }
+        
+        .steps-container::before {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="hero-section">
+    <div class="hero-content">
+        <div class="hero-icon-wrapper">
+            <i class="fas fa-shield-alt hero-icon"></i>
+        </div>
+        <h1 class="hero-title">AI-Powered GDPR<br>Compliance Assistant</h1>
+        <p class="hero-subtitle">
+            Automatically detect violations, get expert guidance, and generate professional compliance reports in minutes
+        </p>
+        <a href="{{ url_for('analyze_page') }}" class="cta-button">
+            <i class="fas fa-rocket"></i>
+            <span>Start Compliance Analysis</span>
+        </a>
+    </div>
+</div>
+
+<!-- Benefits Section -->
+<div class="benefits-section">
+    <div class="section-header">
+        <h2 class="section-title">Why Choose Our Platform</h2>
+        <p class="section-subtitle">Trusted by compliance professionals for accurate, actionable insights</p>
+    </div>
+    
+    <div class="benefits-grid">
+        <div class="benefit-item">
+            <div class="benefit-icon">
+                <i class="fas fa-bolt"></i>
+            </div>
+            <div class="benefit-content">
+                <h4>Lightning Fast Analysis</h4>
+                <p>Get comprehensive compliance reports in under 60 seconds with our optimized AI engine</p>
+            </div>
+        </div>
+        
+        <div class="benefit-item">
+            <div class="benefit-icon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="benefit-content">
+                <h4>100% Citation Accuracy</h4>
+                <p>Every violation is backed by direct GDPR article references with full quoted text</p>
+            </div>
+        </div>
+        
+        <div class="benefit-item">
+            <div class="benefit-icon">
+                <i class="fas fa-shield-check"></i>
+            </div>
+            <div class="benefit-content">
+                <h4>Completely Private</h4>
+                <p>All processing happens locally—your data never leaves your infrastructure</p>
+            </div>
+        </div>
+        
+        <div class="benefit-item">
+            <div class="benefit-icon">
+                <i class="fas fa-brain"></i>
+            </div>
+            <div class="benefit-content">
+                <h4>Advanced AI Detection</h4>
+                <p>Two-stage LLM architecture identifies 10+ violation types across all GDPR chapters</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- How It Works -->
+<div class="how-it-works">
+    <div class="section-header" style="margin-bottom: 3rem;">
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-subtitle">Four simple steps from scenario to compliance report</p>
+    </div>
+    
+    <div class="steps-container">
+        <div class="step">
+            <div class="step-number">1</div>
+            <h3 class="step-title">Describe Scenario</h3>
+            <p class="step-description">Input your data processing activity, user case, or business scenario in plain language</p>
+        </div>
+        
+        <div class="step">
+            <div class="step-number">2</div>
+            <h3 class="step-title">AI Analysis</h3>
+            <p class="step-description">Our system searches 2,693 articles and detects potential violations using advanced AI</p>
+        </div>
+        
+        <div class="step">
+            <div class="step-number">3</div>
+            <h3 class="step-title">Get Guidance</h3>
+            <p class="step-description">Receive professional remediation plans with timelines, costs, and implementation steps</p>
+        </div>
+        
+        <div class="step">
+            <div class="step-number">4</div>
+            <h3 class="step-title">Export Report</h3>
+            <p class="step-description">Download audit-ready documentation as PDF, Markdown, or JSON format</p>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Final Call to Action -->
+<div class="final-cta">
+    <h2>Ready to Ensure GDPR Compliance?</h2>
+    <p>Start analyzing your data processing scenarios now and get professional guidance in minutes</p>
+    <a href="{{ url_for('analyze_page') }}" class="cta-button">
+        <i class="fas fa-rocket"></i>
+        <span>Start Your Analysis Now</span>
+    </a>
+</div>
+
+{% endblock %}

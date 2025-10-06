@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Error - GDPR Compliance Dashboard{% endblock %}
+
+{% block content %}
+<div class="flex-center" style="min-height: 60vh;">
+    <div class="text-center">
+        <i class="fas fa-exclamation-circle" style="font-size: 5rem; color: var(--color-critical); margin-bottom: var(--spacing-lg);"></i>
+        <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: var(--spacing-md);">
+            Oops! Something went wrong
+        </h1>
+        <p style="color: var(--text-secondary); margin-bottom: var(--spacing-xl); font-size: 1.1rem;">
+            {{ message }}
+        </p>
+        <div class="flex-center gap-md">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">
+                <i class="fas fa-home"></i>
+                Go Home
+            </a>
+            <a href="{{ url_for('analyze_page') }}" class="btn btn-secondary">
+                <i class="fas fa-search"></i>
+                New Analysis
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

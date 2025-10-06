@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+{% block title %}GDPR Knowledge Base{% endblock %}
+{% block content %}
+
+<!-- Header -->
+<div style="margin-bottom: 2rem;">
+    <h1 style="font-size: 2.5rem; font-weight: 700; margin: 0 0 0.5rem 0;">
+        <i class="fas fa-book-open"></i> GDPR Knowledge Base
+    </h1>
+    <p style="color: var(--text-secondary); font-size: 1.125rem; margin: 0;">
+        Search and browse complete GDPR regulation
+    </p>
+</div>
+
+    <!-- Search Section -->
+    <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 2rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        <h2 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 1.5rem 0; color: #66B2FF;">
+            <i class="fas fa-search"></i> AI-Powered Semantic Search
+        </h2>
+    
+    <!-- Search Controls -->
+    <div style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.75rem; margin-bottom: 1rem;">
+        <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Search articles, topics, or keywords..."
+            style="padding: 14px 18px; border: 2px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font-size: 1rem;"
+            onkeypress="if(event.key==='Enter') performSearch()"
+        />
+        
+        <select 
+            id="languageFilter" 
+            style="padding: 14px 18px; border: 2px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); min-width: 140px;"
+        >
+            <option value="EN">🇬🇧 English</option>
+            <option value="ALL">🌍 All Languages</option>
+        </select>
+        
+        <select 
+            id="resultCount" 
+            style="padding: 14px 18px; border: 2px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); min-width: 110px;"
+        >
+            <option value="5">5 Results</option>
+            <option value="10" selected>10 Results</option>
+            <option value="20">20 Results</option>
+        </select>
+        
+        <button 
+            onclick="performSearch()" 
+            class="btn btn-primary"
+            style="padding: 14px 28px; font-weight: 600; white-space: nowrap;"
+        >
+            <i class="fas fa-search"></i> Search
+        </button>
+    </div>
+    
+    <!-- Quick Topics (Removed: Int'l Transfers, Privacy by Design, Penalties & Fines) -->
+    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+        <span style="color: var(--text-secondary); font-size: 0.875rem; padding: 8px 0;">Quick topics:</span>
+        <button onclick="quickSearch('consent')" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.875rem;">
+            Consent
+        </button>
+        <button onclick="quickSearch('data subject rights')" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.875rem;">
+            Data Rights
+        </button>
+        <button onclick="quickSearch('data breach')" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.875rem;">
+            Data Breach
+        </button>
+        <button onclick="quickSearch('legitimate interest')" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.875rem;">
+            Legitimate Interest
+        </button>
+        <button onclick="quickSearch('DPO')" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.875rem;">
+            DPO
+        </button>
+    </div>
+</div>
+
+<!-- Article Jump -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem 0;">
+        <i class="fas fa-forward"></i> Jump to Article
+    </h3>
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <input 
+            type="number" 
+            id="articleNumber" 
+            placeholder="Article #" 
+            min="1" 
+            max="99"
+            style="width: 120px; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary);"
+            onkeypress="if(event.key==='Enter') viewArticlePDF()"
+        />
+        <button onclick="viewArticlePDF()" class="btn btn-primary" style="padding: 12px 24px;">
+            <i class="fas fa-file-pdf"></i> View Article in Official PDF
+        </button>
+        <span style="color: var(--text-secondary); font-size: 0.875rem; margin-left: 1rem;">
+            Examples: 
+            <a href="#" onclick="document.getElementById('articleNumber').value=6; viewArticlePDF(); return false;" style="color: var(--primary-color); margin: 0 0.5rem;">Art. 6</a>
+            <a href="#" onclick="document.getElementById('articleNumber').value=15; viewArticlePDF(); return false;" style="color: var(--primary-color); margin: 0 0.5rem;">Art. 15</a>
+            <a href="#" onclick="document.getElementById('articleNumber').value=33; viewArticlePDF(); return false;" style="color: var(--primary-color); margin: 0 0.5rem;">Art. 33</a>
+        </span>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" style="display: none; text-align: center; padding: 3rem;">
+    <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 1.125rem;">Searching...</p>
+</div>
+
+<!-- Results Section -->
+<div id="resultsSection" style="display: none;">
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <div>
+                <h2 style="font-size: 1.5rem; font-weight: 600; margin: 0 0 0.5rem 0;">
+                    <i class="fas fa-list-alt"></i> Search Results
+                </h2>
+                <p id="resultsInfo" style="color: var(--text-secondary); margin: 0;"></p>
+            </div>
+            <div>
+                <button onclick="exportResults('pdf')" class="btn btn-secondary">
+                    <i class="fas fa-file-pdf"></i> Export PDF
+                </button>
+            </div>
+        </div>
+        
+        <div id="resultsList"></div>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.result-card {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.result-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    border-color: var(--primary-color);
+}
+
+.article-badge {
+    background: var(--primary-color);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.relevance-badge {
+    background: var(--success-color);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.article-content {
+    background: var(--bg-primary);
+    border-left: 4px solid var(--primary-color);
+    padding: 1.25rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    line-height: 1.8;
+    font-size: 1.05rem;
+    position: relative;
+}
+
+.copy-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.copy-btn:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* Fixed highlight color for dark mode */
+mark {
+    background: #FFD700;
+    color: #000000;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+</style>
+
+<script>
+let currentResults = [];
+let currentQuery = '';
+
+function quickSearch(query) {
+    document.getElementById('searchInput').value = query;
+    performSearch();
+}
+
+async function performSearch() {
+    const query = document.getElementById('searchInput').value.trim();
+    const language = document.getElementById('languageFilter').value;
+    const topK = parseInt(document.getElementById('resultCount').value);
+    
+    if (!query) {
+        showToast('Please enter a search query', 'warning');
+        return;
+    }
+    
+    currentQuery = query;
+    
+    // Show loading
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('resultsSection').style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/knowledge/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                query: query, 
+                top_k: topK,
+                language: language 
+            })
+        });
+        
+        if (!response.ok) throw new Error('Search failed');
+        
+        const data = await response.json();
+        currentResults = data.results;
+        
+        displayResults(data);
+        
+    } catch (error) {
+        console.error('Search error:', error);
+        showToast('Search failed. Please try again.', 'error');
+    } finally {
+        document.getElementById('loadingState').style.display = 'none';
+    }
+}
+
+function jumpToArticle(num) {
+    const articleNum = num || document.getElementById('articleNumber').value;
+    if (!articleNum) {
+        showToast('Please enter an article number', 'warning');
+        return;
+    }
+    document.getElementById('searchInput').value = `Article ${articleNum}`;
+    performSearch();
+}
+
+function viewArticlePDF() {
+    const articleNum = document.getElementById('articleNumber').value;
+    if (!articleNum) {
+        showToast('Please enter an article number', 'warning');
+        return;
+    }
+    
+    // ACCURATE GDPR article to PDF page mapping - EUR-Lex official PDF
+    // Based on actual EUR-Lex PDF structure: CELEX:32016R0679
+    // Pages 1-23: Preamble, Pages 24-32: Recitals, Pages 33+: Articles
+    const articlePageMap = {
+        1: 33, 2: 33, 3: 34, 4: 35, 5: 37, 6: 38, 7: 39, 8: 40, 9: 40, 10: 42,
+        11: 42, 12: 43, 13: 44, 14: 45, 15: 46, 16: 47, 17: 47, 18: 48, 19: 49, 20: 49,
+        21: 50, 22: 51, 23: 51, 24: 52, 25: 53, 26: 53, 27: 54, 28: 54, 29: 55, 30: 55,
+        31: 56, 32: 56, 33: 57, 34: 58, 35: 59, 36: 60, 37: 61, 38: 62, 39: 62, 40: 63,
+        41: 64, 42: 64, 43: 65, 44: 66, 45: 66, 46: 67, 47: 68, 48: 69, 49: 70, 50: 71,
+        51: 72, 52: 72, 53: 73, 54: 74, 55: 74, 56: 75, 57: 75, 58: 77, 59: 78, 60: 78,
+        61: 79, 62: 80, 63: 81, 64: 81, 65: 82, 66: 82, 67: 83, 68: 83, 69: 83, 70: 84,
+        71: 85, 72: 85, 73: 85, 74: 86, 75: 86, 76: 86, 77: 87, 78: 87, 79: 87, 80: 88,
+        81: 88, 82: 89, 83: 89, 84: 91, 85: 91, 86: 92, 87: 92, 88: 92, 89: 93, 90: 93,
+        91: 93
+    };
+    
+    const page = articlePageMap[articleNum] || 32;
+    
+    // Official GDPR PDF from EUR-Lex
+    const pdfUrl = 'https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32016R0679';
+    
+    // Open PDF at specific page
+    window.open(`${pdfUrl}#page=${page}`, '_blank');
+    showToast(`Opening Article ${articleNum} at page ${page}`, 'success');
+}
+
+function displayResults(data) {
+    const section = document.getElementById('resultsSection');
+    const info = document.getElementById('resultsInfo');
+    const list = document.getElementById('resultsList');
+    
+    section.style.display = 'block';
+    
+    // Clean info display - removed time and average relevance
+    info.textContent = `Found ${data.results.length} results for "${currentQuery}"`;
+    
+    if (data.results.length === 0) {
+        list.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <i class="fas fa-search" style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;"></i>
+                <p style="font-size: 1.125rem;">No results found. Try different keywords.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    list.innerHTML = data.results.map((result, index) => `
+        <div class="result-card">
+            <!-- Header -->
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <span class="article-badge">#${index + 1}</span>
+                    ${result.metadata.source ? `
+                        <span style="background: var(--success-color); color: white; padding: 4px 12px; border-radius: 6px; font-size: 0.875rem;">
+                            ${result.metadata.source}
+                        </span>
+                    ` : ''}
+                    ${result.metadata.article_number ? `
+                        <span style="background: var(--info-color); color: white; padding: 4px 12px; border-radius: 6px; font-size: 0.875rem;">
+                            Article ${result.metadata.article_number}
+                        </span>
+                    ` : ''}
+                    ${result.metadata.language ? `
+                        <span style="background: var(--bg-primary); color: var(--text-secondary); padding: 4px 12px; border-radius: 6px; font-size: 0.875rem; border: 1px solid var(--border-color);">
+                            ${getLanguageFlag(result.metadata.language)} ${result.metadata.language}
+                        </span>
+                    ` : ''}
+                </div>
+                <span class="relevance-badge">
+                    ${(result.score * 100).toFixed(1)}%
+                </span>
+            </div>
+            
+            <!-- Content with Copy Button -->
+            <div class="article-content">
+                <button class="copy-btn" onclick="copyText(${index})" title="Copy text">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <div id="content-${index}">
+                    ${highlightText(result.text, currentQuery)}
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            ${result.metadata.article_number || result.metadata.recital_number ? `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; gap: 1.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+                        ${result.metadata.article_number ? `
+                            <span><i class="fas fa-section"></i> Article ${result.metadata.article_number}</span>
+                        ` : ''}
+                        ${result.metadata.recital_number ? `
+                            <span><i class="fas fa-quote-left"></i> Recital ${result.metadata.recital_number}</span>
+                        ` : ''}
+                    </div>
+                    ${result.metadata.article_number ? `
+                        <button 
+                            onclick="openArticlePDF(${result.metadata.article_number})" 
+                            class="btn btn-secondary" 
+                            style="padding: 6px 12px; font-size: 0.875rem;"
+                            title="View Article ${result.metadata.article_number} in official GDPR PDF"
+                        >
+                            <i class="fas fa-external-link-alt"></i> View in PDF
+                        </button>
+                    ` : ''}
+                </div>
+            ` : ''}
+        </div>
+    `).join('');
+    
+    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openArticlePDF(articleNum) {
+    // ACCURATE GDPR article to PDF page mapping - EUR-Lex official PDF
+    const articlePageMap = {
+        1: 33, 2: 33, 3: 34, 4: 35, 5: 37, 6: 38, 7: 39, 8: 40, 9: 40, 10: 42,
+        11: 42, 12: 43, 13: 44, 14: 45, 15: 46, 16: 47, 17: 47, 18: 48, 19: 49, 20: 49,
+        21: 50, 22: 51, 23: 51, 24: 52, 25: 53, 26: 53, 27: 54, 28: 54, 29: 55, 30: 55,
+        31: 56, 32: 56, 33: 57, 34: 58, 35: 59, 36: 60, 37: 61, 38: 62, 39: 62, 40: 63,
+        41: 64, 42: 64, 43: 65, 44: 66, 45: 66, 46: 67, 47: 68, 48: 69, 49: 70, 50: 71,
+        51: 72, 52: 72, 53: 73, 54: 74, 55: 74, 56: 75, 57: 75, 58: 77, 59: 78, 60: 78,
+        61: 79, 62: 80, 63: 81, 64: 81, 65: 82, 66: 82, 67: 83, 68: 83, 69: 83, 70: 84,
+        71: 85, 72: 85, 73: 85, 74: 86, 75: 86, 76: 86, 77: 87, 78: 87, 79: 87, 80: 88,
+        81: 88, 82: 89, 83: 89, 84: 91, 85: 91, 86: 92, 87: 92, 88: 92, 89: 93, 90: 93,
+        91: 93
+    };
+    
+    const page = articlePageMap[articleNum] || 33;
+    const pdfUrl = 'https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32016R0679';
+    window.open(`${pdfUrl}#page=${page}`, '_blank');
+}
+
+function copyText(index) {
+    const contentDiv = document.getElementById(`content-${index}`);
+    const text = contentDiv.innerText || contentDiv.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Text copied to clipboard', 'success');
+    }).catch(() => {
+        // Fallback method
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showToast('Text copied to clipboard', 'success');
+        } catch (err) {
+            showToast('Failed to copy text', 'error');
+        }
+        document.body.removeChild(textarea);
+    });
+}
+
+function highlightText(text, query) {
+    if (!query || text.length < 50) return text;
+    
+    // Truncate very long text
+    const maxLength = 800;
+    let displayText = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    
+    const words = query.toLowerCase().split(' ').filter(w => w.length > 2);
+    words.forEach(word => {
+        const regex = new RegExp(`(${word})`, 'gi');
+        displayText = displayText.replace(regex, '<mark>$1</mark>');
+    });
+    
+    return displayText;
+}
+
+function getLanguageFlag(lang) {
+    const flags = {
+        'EN': '🇬🇧',
+        'DE': '🇩🇪',
+        'FR': '🇫🇷',
+        'ES': '🇪🇸',
+        'IT': '🇮🇹'
+    };
+    return flags[lang] || '🌍';
+}
+
+function exportResults(format) {
+    if (currentResults.length === 0) {
+        showToast('No results to export', 'warning');
+        return;
+    }
+    
+    if (format === 'pdf') {
+        // Create printable HTML version
+        const printWindow = window.open('', '', 'width=800,height=600');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>GDPR Search Results - ${currentQuery}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; }
+                    h1 { color: #333; }
+                    .result { border: 1px solid #ddd; padding: 15px; margin: 15px 0; page-break-inside: avoid; }
+                    .metadata { color: #666; font-size: 14px; margin-bottom: 10px; }
+                    .content { line-height: 1.6; }
+                </style>
+            </head>
+            <body>
+                <h1>GDPR Knowledge Base Search Results</h1>
+                <p><strong>Query:</strong> ${currentQuery}</p>
+                <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+                <p><strong>Results:</strong> ${currentResults.length}</p>
+                <hr>
+                ${currentResults.map((r, i) => `
+                    <div class="result">
+                        <div class="metadata">
+                            <strong>Result ${i + 1}</strong> - 
+                            Relevance: ${(r.score * 100).toFixed(1)}% - 
+                            ${r.metadata.article_number ? `Article ${r.metadata.article_number}` : ''} - 
+                            ${r.metadata.language || 'EN'}
+                        </div>
+                        <div class="content">${r.text}</div>
+                    </div>
+                `).join('')}
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        setTimeout(() => {
+            printWindow.print();
+        }, 250);
+        showToast('Opening print dialog for PDF export', 'success');
+    }
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#3B82F6'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-weight: 500;
+        animation: slideIn 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Auto-focus search on page load
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('searchInput').focus();
+});
+</script>
+
+<style>
+@keyframes slideIn {
+    from { transform: translateX(400px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(400px); opacity: 0; }
+}
+</style>
+
+{% endblock %}

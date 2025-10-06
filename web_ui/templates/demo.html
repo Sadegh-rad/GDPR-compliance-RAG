@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Interactive Demo - GDPR Compliance Dashboard{% endblock %}
+{% block content %}
+<h1 style="font-size: 2rem; font-weight: 700; margin-bottom: var(--spacing-lg);">
+    <i class="fas fa-play-circle"></i> Interactive Demo
+</h1>
+<div class="card text-center">
+    <i class="fas fa-rocket" style="font-size: 4rem; color: var(--btn-primary); margin-bottom: var(--spacing-lg); filter: drop-shadow(var(--glow-blue));"></i>
+    <h2 class="mb-md">Ready to see it in action?</h2>
+    <p style="color: var(--text-secondary); margin-bottom: var(--spacing-xl);">
+        Try analyzing a real scenario to see how the system detects GDPR violations.
+    </p>
+    <a href="{{ url_for('analyze_page') }}" class="btn btn-primary btn-lg">
+        <i class="fas fa-arrow-right"></i> Start Demo
+    </a>
+</div>
+{% endblock %}

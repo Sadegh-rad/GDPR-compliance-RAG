@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Reports Archive - GDPR Compliance Dashboard{% endblock %}
+{% block content %}
+<h1 style="font-size: 2rem; font-weight: 700; margin-bottom: var(--spacing-lg);">
+    <i class="fas fa-folder-open"></i> Reports Archive
+</h1>
+
+{% if analyses %}
+<div class="grid grid-3 gap-lg">
+    {% for analysis_id, result in analyses %}
+    <div class="card">
+        <div class="flex-between mb-md">
+            <span class="badge badge-{{ result.risk_level|lower }}">{{ result.risk_level }}</span>
+            <span style="color: var(--text-secondary); font-size: 0.85rem;">{{ result.timestamp[:10] }}</span>
+        </div>
+        <h3 class="mb-sm" style="font-size: 1.1rem; font-weight: 600;">
+            Analysis #{{ analysis_id[:8] }}
+        </h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: var(--spacing-md);">
+            {{ result.scenario[:100] }}...
+        </p>
+        <div class="flex gap-sm">
+            <a href="{{ url_for('results_page', analysis_id=analysis_id) }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-eye"></i> View
+            </a>
+            <button onclick="GDPRDashboard.deleteAnalysis('{{ analysis_id }}')" class="btn btn-danger btn-sm">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card text-center">
+    <i class="fas fa-inbox" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: var(--spacing-md);"></i>
+    <h2>No Reports Yet</h2>
+    <p style="color: var(--text-secondary); margin-bottom: var(--spacing-lg);">
+        Start analyzing scenarios to see your reports here.
+    </p>
+    <a href="{{ url_for('analyze_page') }}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Create First Analysis
+    </a>
+</div>
+{% endif %}
+{% endblock %}

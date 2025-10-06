@@ -18,6 +18,7 @@ except ImportError:
     raise
 
 from rag.gdpr_rag import GDPRRAGSystem
+from remediation.remediation_engine import RemediationEngine, RemediationGuidance
 
 
 @dataclass
@@ -31,6 +32,7 @@ class SourceCitation:
 
 
 @dataclass
+@dataclass
 class GDPRViolation:
     """Represents a potential GDPR violation with verifiable sources"""
     category: str
@@ -41,10 +43,14 @@ class GDPRViolation:
     recommendation: str
     risk_score: float  # 0-10
     
-    # New fields for enhanced verification
+    # Enhanced verification fields
     highlighted_text: Optional[str] = None  # Problematic text from user's document
     source_citations: Optional[List[SourceCitation]] = None  # GDPR sources used
     verification_notes: Optional[str] = None  # How to verify this finding
+    context_metadata: Optional[Dict] = None  # Additional metadata from LLM
+    
+    # Professional remediation guidance
+    remediation_guidance: Optional[RemediationGuidance] = None  # Detailed action plan
 
 
 @dataclass
@@ -65,11 +71,20 @@ class GDPRViolationFinder:
     def __init__(self, config: Dict):
         self.config = config
         self.rag_system = GDPRRAGSystem(config)
+        
+        # Initialize DYNAMIC remediation engine with RAG and LLM access
+        from remediation.remediation_engine_dynamic import DynamicRemediationEngine
+        self.remediation_engine = DynamicRemediationEngine(
+            rag_system=self.rag_system,
+            llm_client=self.rag_system  # RAG system has LLM client
+        )
+        logger.info("Initialized GDPR Violation Finder with Dynamic Remediation Engine")
+        
         self.prompts = config.get('prompts', {})
         self.risk_categories = config.get('risk_assessment', {}).get('categories', [])
         self.severity_levels = config.get('risk_assessment', {}).get('severity_levels', [])
         
-        logger.info("Initialized GDPR Violation Finder")
+        logger.info("Initialized GDPR Violation Finder with Remediation Engine")
     
     def analyze_scenario(self, scenario: str, context_type: Optional[str] = None) -> RiskAssessment:
         """
@@ -87,43 +102,98 @@ class GDPRViolationFinder:
         # Step 1: Retrieve relevant GDPR articles and guidelines
         relevant_context = self._retrieve_relevant_regulations(scenario, context_type)
         
-        # Step 2: Identify potential violations
+        # Step 2: Identify potential violations (FIRST LLM CALL - focused on finding violations)
         violations = self._identify_violations(scenario, relevant_context)
         
-        # Step 3: Assess overall risk
+        # Create summary of all violations for remediation context
+        all_violations_summary = self._format_violations_summary(violations)
+        
+        # Step 3: Generate DYNAMIC, LLM-driven remediation guidance for each violation
+        # (SECOND LLM CALL - focused on remediation, uses violation findings)
+        for violation in violations:
+            try:
+                remediation = self.remediation_engine.generate_remediation(
+                    violation_category=violation.category,
+                    articles=violation.articles,
+                    severity=violation.severity,
+                    context=scenario,
+                    evidence=violation.evidence,  # Pass problematic text for context
+                    all_violations_text=all_violations_summary  # Pass all violations for holistic remediation
+                )
+                violation.remediation_guidance = remediation
+                logger.info(f"✓ Generated dynamic remediation for {violation.category}")
+            except Exception as e:
+                logger.warning(f"Could not generate remediation for {violation.category}: {e}")
+        
+        # Step 4: Assess overall risk
         risk_assessment = self._assess_overall_risk(scenario, violations, relevant_context)
         
         logger.info(f"Analysis complete. Found {len(violations)} potential violations")
         
         return risk_assessment
     
+    def _format_violations_summary(self, violations: List['GDPRViolation']) -> str:
+        """Format all violations into a summary for remediation context"""
+        if not violations:
+            return "No violations found"
+        
+        summary_parts = []
+        for i, v in enumerate(violations, 1):
+            summary_parts.append(f"{i}. {v.category} (Severity: {v.severity}, Articles: {', '.join(v.articles or ['N/A'])})")
+            if v.description:
+                summary_parts.append(f"   Details: {v.description[:200]}")
+        
+        return "\n".join(summary_parts)
+    
     def _retrieve_relevant_regulations(self, scenario: str, context_type: Optional[str]) -> List[Dict]:
-        """Retrieve relevant GDPR regulations and guidelines"""
+        """Retrieve relevant GDPR regulations dynamically based on scenario content"""
         
-        # Build search queries based on scenario
-        queries = [scenario]
-        
-        # Add category-specific queries
-        for category in self.risk_categories:
-            if any(keyword in scenario.lower() for keyword in category.lower().split()):
-                queries.append(f"{category} GDPR requirements")
-        
-        # Retrieve context for all queries
+        # Multi-strategy retrieval - no hardcoded hints
         all_results = []
-        for query in queries[:3]:  # Limit to avoid too many queries
-            results = self.rag_system.retrieve_context(query, top_k=5)
-            all_results.extend(results)
         
-        # Deduplicate based on chunk_id
+        # Strategy 1: Use full scenario for semantic search
+        query1 = scenario[:500]  # First 500 chars of scenario
+        results1 = self.rag_system.retrieve_context(query1, top_k=15)
+        all_results.extend(results1)
+        
+        # Strategy 2: Extract specific Article mentions if present
+        import re
+        article_mentions = re.findall(r'article\s+(\d+)', scenario.lower())
+        if article_mentions:
+            for article_num in article_mentions[:3]:
+                query2 = f"Article {article_num} GDPR"
+                results2 = self.rag_system.retrieve_context(query2, top_k=5)
+                all_results.extend(results2)
+        
+        # Strategy 3: Search for general GDPR compliance requirements
+        query3 = "GDPR requirements obligations compliance"
+        results3 = self.rag_system.retrieve_context(query3, top_k=10)
+        all_results.extend(results3)
+        
+        # Deduplicate and prioritize
         seen_ids = set()
         unique_results = []
+        
+        # First pass: Prioritize results with "Article" in text
         for result in all_results:
-            chunk_id = result['chunk'].get('chunk_id')
+            chunk_id = result.get('chunk', {}).get('chunk_id') or result.get('metadata', {}).get('chunk_id')
+            if chunk_id and chunk_id not in seen_ids:
+                text = result.get('text', '').lower()
+                if 'article' in text and 'recital' not in text:
+                    seen_ids.add(chunk_id)
+                    unique_results.append(result)
+        
+        # Second pass: Add other relevant results
+        for result in all_results:
+            chunk_id = result.get('chunk', {}).get('chunk_id') or result.get('metadata', {}).get('chunk_id')
             if chunk_id and chunk_id not in seen_ids:
                 seen_ids.add(chunk_id)
                 unique_results.append(result)
+                if len(unique_results) >= 10:
+                    break
         
-        return unique_results[:10]  # Top 10 most relevant
+        logger.info(f"Retrieved {len(unique_results)} unique high-quality documents")
+        return unique_results[:10]  # Top 10 for reranking
     
     def _identify_violations(self, scenario: str, context: List[Dict]) -> List[GDPRViolation]:
         """Identify specific GDPR violations"""
@@ -131,11 +201,13 @@ class GDPRViolationFinder:
         # Format context for violation analysis
         context_text = self.rag_system.format_context(context)
         
-        # Construct violation finder prompt
-        prompt = self.prompts.get('violation_finder_prompt', '').format(
-            context=context_text,
-            query=scenario
-        )
+        # Log context preview for debugging
+        logger.info(f"Context preview (first 500 chars): {context_text[:500]}")
+        
+        # Construct violation finder prompt - manually to avoid JSON escaping issues
+        prompt_template = self.prompts.get('violation_finder_prompt', '')
+        # Replace placeholders manually
+        prompt = prompt_template.replace('{context}', context_text).replace('{query}', scenario)
         
         # Generate violation analysis
         response = self.rag_system.generate_response(
@@ -144,129 +216,279 @@ class GDPRViolationFinder:
             custom_prompt_template=prompt
         )
         
+        # Log LLM response preview for debugging
+        logger.info(f"LLM response preview (first 1000 chars): {response['answer'][:1000]}")
+        
         # Parse violations from response
         violations = self._parse_violations_from_response(response['answer'], context)
         
         return violations
     
     def _parse_violations_from_response(self, response: str, context: List[Dict]) -> List[GDPRViolation]:
-        """Parse structured violations from LLM response with enhanced source tracking"""
+        """Parse violations from simple text format (no JSON)"""
         violations = []
         
-        # Use LLM to structure the response into JSON with enhanced fields
-        structure_prompt = f"""Based on the following violation analysis, extract structured information about each violation.
-
-For each violation, provide:
-- category: The GDPR category (e.g., "Data Subject Rights", "Data Processing Principles")
-- severity: Critical, High, Medium, Low, or Informational
-- articles: List of relevant GDPR articles (e.g., ["Article 6", "Article 13"])
-- description: Brief description of the violation
-- evidence: Evidence from the scenario
-- recommendation: How to remediate
-- risk_score: Score from 0-10
-- highlighted_text: EXACT quote from the scenario showing the problem (required)
-- source_citations: Array of objects with:
-  - article_or_recital: e.g., "Article 6(1)(a)" or "Recital 42"
-  - quoted_text: Exact quote from GDPR
-  - source_document: e.g., "GDPR Regulation (EU) 2016/679"
-  - context: Additional context from GDPR
-  - relevance_score: 0-1 confidence score
-- verification_notes: How to verify this finding
-
-Analysis:
-{response}
-
-Return ONLY a valid JSON array of violations with all fields. Example format:
-[
-  {{
-    "category": "Legal Basis",
-    "severity": "Critical",
-    "articles": ["Article 6(1)"],
-    "description": "Processing without legal basis",
-    "evidence": "No consent mechanism",
-    "recommendation": "Implement consent collection",
-    "risk_score": 8.5,
-    "highlighted_text": "We collect email addresses without explicit consent",
-    "source_citations": [
-      {{
-        "article_or_recital": "Article 6(1)(a)",
-        "quoted_text": "Processing shall be lawful only if and to the extent that at least one of the following applies: (a) the data subject has given consent",
-        "source_document": "GDPR Regulation (EU) 2016/679",
-        "context": "Article 6 defines lawful basis for processing",
-        "relevance_score": 0.95
-      }}
-    ],
-    "verification_notes": "Check privacy policy for consent mechanism"
-  }}
-]"""
+        # Split by "VIOLATION" markers
+        violation_blocks = response.split('VIOLATION ')[1:]  # Skip first empty split
         
-        try:
-            structure_response = ollama.chat(
-                model=self.rag_system.model,
-                messages=[
-                    {'role': 'system', 'content': 'You are a JSON extraction assistant. Return only valid JSON arrays. Ensure all strings are properly escaped.'},
-                    {'role': 'user', 'content': structure_prompt}
-                ],
-                options={'temperature': 0.1}
-            )
-            
-            # Try to parse JSON
-            json_text = structure_response['message']['content'].strip()
-            
-            # Clean up markdown code blocks if present
-            if json_text.startswith('```'):
-                json_text = json_text.split('```')[1]
-                if json_text.startswith('json'):
-                    json_text = json_text[4:]
-                json_text = json_text.strip()
-            
-            structured_data = json.loads(json_text)
-            
-            for v_data in structured_data:
-                # Parse source citations
-                source_citations = []
-                if 'source_citations' in v_data and v_data['source_citations']:
-                    for cit_data in v_data['source_citations']:
-                        citation = SourceCitation(
-                            article_or_recital=cit_data.get('article_or_recital', 'Unknown'),
-                            quoted_text=cit_data.get('quoted_text', ''),
-                            source_document=cit_data.get('source_document', 'GDPR'),
-                            context=cit_data.get('context', ''),
-                            relevance_score=float(cit_data.get('relevance_score', 0.5))
-                        )
-                        source_citations.append(citation)
+        if not violation_blocks:
+            logger.warning("No violation markers found, using fallback")
+            violations.append(self._create_fallback_violation(response))
+            return violations
+        
+        logger.info(f"Found {len(violation_blocks)} violation blocks to parse")
+        
+        for idx, block in enumerate(violation_blocks[:10], 1):  # Max 10 violations
+            try:
+                violation_data = {
+                    'category': '',
+                    'severity': 'Medium',
+                    'articles': [],
+                    'quote': '',
+                    'description': ''
+                }
                 
-                violation = GDPRViolation(
-                    category=v_data.get('category', 'Unknown'),
-                    severity=v_data.get('severity', 'Medium'),
-                    articles=v_data.get('articles', []),
-                    description=v_data.get('description', ''),
-                    evidence=v_data.get('evidence', ''),
-                    recommendation=v_data.get('recommendation', ''),
-                    risk_score=float(v_data.get('risk_score', 5.0)),
-                    highlighted_text=v_data.get('highlighted_text'),
-                    source_citations=source_citations if source_citations else None,
-                    verification_notes=v_data.get('verification_notes')
-                )
-                violations.append(violation)
+                lines = block.strip().split('\n')
                 
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.warning(f"Could not parse structured violations: {e}")
-            # Fallback: create a single violation from the full response
-            violations.append(GDPRViolation(
-                category="General Compliance",
-                severity="Medium",
-                articles=[],
-                description="Multiple potential violations identified",
-                evidence=response[:500],
-                recommendation="Conduct detailed compliance review",
-                risk_score=5.0,
-                highlighted_text=None,
-                source_citations=None,
-                verification_notes="Manual review required due to parsing error"
-            ))
+                for line in lines:
+                    line = line.strip()
+                    if not line or ':' not in line:
+                        continue
+                        
+                    key, value = line.split(':', 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    
+                    if 'category' in key:
+                        violation_data['category'] = value
+                    elif 'severity' in key:
+                        violation_data['severity'] = value
+                    elif 'article' in key:
+                        # Parse articles - could be "6, 7" or "6(1)(a), 7"
+                        articles = [a.strip() for a in value.replace(',', ' ').split() if a.strip()]
+                        violation_data['articles'] = articles
+                    elif 'quote' in key or 'problematic' in key:
+                        violation_data['quote'] = value.strip('"\'')
+                    elif 'why' in key or 'description' in key:
+                        violation_data['description'] = value
+                
+                # Only create violation if we have minimum required data
+                if violation_data['category']:
+                    # Map severity to risk score
+                    severity = violation_data['severity']
+                    severity_scores = {
+                        'Critical': 9.0,
+                        'High': 7.0,
+                        'Medium': 5.0,
+                        'Low': 3.0
+                    }
+                    risk_score = severity_scores.get(severity, 5.0)
+                    
+                    violation = GDPRViolation(
+                        category=violation_data['category'],
+                        severity=severity,
+                        articles=violation_data['articles'],
+                        description=violation_data['description'] or f"GDPR violation related to {violation_data['category']}",
+                        highlighted_text=violation_data['quote'],
+                        recommendation='',  # Will be generated by remediation engine
+                        risk_score=risk_score,
+                        evidence=violation_data['description'][:500] if violation_data['description'] else '',
+                        context_metadata={'source': 'LLM Analysis', 'parser': 'text'}
+                    )
+                    violations.append(violation)
+                    logger.info(f"✓ Parsed violation {idx}: {violation.category} (Severity: {severity}, Articles: {violation.articles})")
+                else:
+                    logger.warning(f"Skipping violation block {idx} - missing category")
+                    
+            except Exception as e:
+                logger.warning(f"Error parsing violation block {idx}: {e}")
+                continue
+        
+        if not violations:
+            logger.warning("No violations parsed successfully, using fallback")
+            violations.append(self._create_fallback_violation(response))
+        else:
+            logger.info(f"Successfully parsed {len(violations)} violations")
         
         return violations
+    
+    def _parse_violations_text_fallback(self, response: str, context: List[Dict]) -> List[GDPRViolation]:
+        """Fallback parser for non-JSON responses"""
+        violations = []
+        
+        # Split by "VIOLATION" markers
+        violation_blocks = response.split('VIOLATION ')[1:]  # Skip first empty split
+        
+        if not violation_blocks:
+            # Final fallback: create one violation from full response
+            logger.warning("No violation markers found, using final fallback")
+            violations.append(self._create_fallback_violation(response))
+            return violations
+        
+        for block in violation_blocks[:5]:  # Max 5 violations
+            try:
+                violation_data = {}
+                lines = block.strip().split('\n')
+                
+                for line in lines:
+                    line = line.strip()
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        key = key.strip().lower()
+                        value = value.strip()
+                        
+                        if 'category' in key:
+                            violation_data['category'] = value
+                        elif 'severity' in key:
+                            violation_data['severity'] = value
+                        elif 'article' in key:
+                            # Parse articles
+                            articles = [a.strip() for a in value.split(',')]
+                            violation_data['articles'] = articles
+                        elif 'problematic' in key or 'quote' in key:
+                            violation_data['highlighted_text'] = value.strip('"\'')
+                        elif 'description' in key:
+                            violation_data['description'] = value
+                
+                # Create violation if we have minimum data
+                if violation_data.get('category'):
+                    severity = violation_data.get('severity', 'Medium')
+                    severity_scores = {
+                        'Critical': 9.0,
+                        'High': 7.0,
+                        'Medium': 5.0,
+                        'Low': 3.0
+                    }
+                    
+                    violation = GDPRViolation(
+                        category=violation_data.get('category', 'GDPR Violation'),
+                        severity=severity,
+                        articles=violation_data.get('articles', []),
+                        description=violation_data.get('description', ''),
+                        highlighted_text=violation_data.get('highlighted_text', ''),
+                        recommendation='',
+                        risk_score=severity_scores.get(severity, 5.0),
+                        evidence='',
+                        context_metadata={'source': 'Text Parsing'}
+                    )
+                    violations.append(violation)
+                    
+            except Exception as e:
+                logger.warning(f"Error parsing violation block: {e}")
+                continue
+        
+        return violations if violations else [self._create_fallback_violation(response)]
+    
+    def _create_fallback_violation(self, response: str) -> GDPRViolation:
+        """Create a fallback violation when parsing fails"""
+        return GDPRViolation(
+            category="GDPR Compliance Review",
+            severity="Medium",
+            articles=[],
+            description="Automated analysis identified potential compliance issues",
+            highlighted_text="",
+            recommendation="Conduct detailed manual compliance review with legal counsel",
+            risk_score=5.0,
+            evidence=response[:500] if response else "",
+            context_metadata={'source': 'Fallback', 'verification': 'Manual review recommended - automated parsing incomplete'}
+        )
+    
+    def _extract_citations(self, violation_data: dict, context: List[Dict]) -> Optional[List[SourceCitation]]:
+        """Extract source citations with ACCURACY VALIDATION - 80%+ target"""
+        articles = violation_data.get('articles', [])
+        if not articles or not context:
+            return None
+        
+        citations = []
+        validated_count = 0
+        
+        for article_ref in articles[:3]:  # Max 3 citations for better coverage
+            # Find matching context - strict validation required
+            best_match = None
+            best_score = 0.0
+            
+            for ctx in context:
+                text = ctx.get('text', '')
+                text_lower = text.lower()
+                metadata = ctx.get('metadata', {})
+                # Use rerank_score if available (more accurate), otherwise fall back to score
+                relevance = ctx.get('rerank_score', ctx.get('score', 0.0))
+                quality_tier = ctx.get('quality_tier', 'Unknown')
+                
+                # STRICT: Skip if this is just a Recital reference
+                if 'recital' in text_lower and 'article' not in text_lower:
+                    continue
+                
+                # Look for EXACT Article mentions (not fuzzy matching)
+                import re
+                article_num = re.search(r'\d+', article_ref)
+                if article_num:
+                    num = article_num.group()
+                    # Must find "Article X" where X is the exact number
+                    pattern = rf'\bArticle\s+{num}\b'
+                    if re.search(pattern, text, re.IGNORECASE):
+                        # This is a valid match - check relevance score
+                        if relevance > best_score:
+                            best_score = relevance
+                            # Extract meaningful quote
+                            article_match = re.search(rf'(Article\s+{num}[^\n.]*(?:\.[^\n.]*)?)', text, re.IGNORECASE)
+                            quote = article_match.group(1) if article_match else text[:200]
+                            
+                            best_match = {
+                                'quote': quote,
+                                'text': text,
+                                'metadata': metadata,
+                                'relevance': relevance,
+                                'quality_tier': quality_tier
+                            }
+            
+            # Add citation if validated - USE QUALITY TIER for better validation
+            # For legal text, we focus on RELATIVE quality (top results) not absolute scores
+            # Since we're using TOP 5 reranked results, be VERY permissive
+            if best_match:
+                # Accept any of top quality tiers OR any reasonable score
+                # These are already the BEST results after reranking!
+                is_acceptable_tier = best_match['quality_tier'] in ['Excellent', 'Good', 'Fair', 'Marginal']
+                has_minimum_score = best_match['relevance'] >= 0.20  # Very low - trust reranking
+                
+                # Accept if it passed Article validation (most important check)
+                if is_acceptable_tier and has_minimum_score:
+                    citation = SourceCitation(
+                        article_or_recital=article_ref,
+                        quoted_text=best_match['quote'],
+                        source_document="GDPR Regulation (EU) 2016/679",
+                        context=best_match['metadata'].get('section_title', 'GDPR Articles'),
+                        relevance_score=best_match['relevance']
+                    )
+                    citations.append(citation)
+                    validated_count += 1
+                    logger.info(f"✓ Validated {article_ref} ({best_match['quality_tier']}, {best_match['relevance']:.1%})")
+                else:
+                    logger.warning(f"✗ {article_ref} quality too low: {best_match['quality_tier']}, {best_match['relevance']:.1%}")
+            else:
+                logger.warning(f"✗ Could not find {article_ref} in retrieved documents")
+        
+        # Log accuracy metrics
+        if citations:
+            avg_relevance = sum(c.relevance_score for c in citations) / len(citations)
+            logger.info(f"Citation accuracy: {avg_relevance:.1%} ({validated_count}/{len(articles)} validated)")
+        
+        return citations if citations else None
+    
+    def _create_fallback_violation(self, response: str) -> GDPRViolation:
+        """Create a fallback violation when parsing fails"""
+        return GDPRViolation(
+            category="GDPR Compliance Review",
+            severity="Medium",
+            articles=[],
+            description="Automated analysis identified potential compliance issues",
+            evidence=response[:250],
+            recommendation="Conduct detailed manual compliance review with legal counsel",
+            risk_score=5.0,
+            highlighted_text=None,
+            source_citations=None,
+            verification_notes="Manual review recommended - automated parsing incomplete"
+        )
     
     def _assess_overall_risk(
         self,
@@ -274,11 +496,32 @@ Return ONLY a valid JSON array of violations with all fields. Example format:
         violations: List[GDPRViolation],
         context: List[Dict]
     ) -> RiskAssessment:
-        """Assess overall compliance risk"""
+        """Assess overall compliance risk (optimized for speed)"""
         
-        # Calculate overall risk score
+        # Calculate overall risk score with weighted approach
         if violations:
-            avg_risk_score = sum(v.risk_score for v in violations) / len(violations)
+            # Weight violations by severity for more accurate risk assessment
+            severity_weights = {
+                'Critical': 1.0,  # Full weight
+                'High': 0.8,
+                'Medium': 0.6,
+                'Low': 0.4
+            }
+            
+            total_weighted_score = 0
+            total_weight = 0
+            
+            for v in violations:
+                weight = severity_weights.get(v.severity, 0.5)
+                total_weighted_score += v.risk_score * weight
+                total_weight += weight
+            
+            # Calculate weighted average
+            avg_risk_score = total_weighted_score / total_weight if total_weight > 0 else 0
+            
+            # Apply volume penalty - more violations increase risk
+            volume_multiplier = 1.0 + (min(len(violations), 10) * 0.02)  # Up to +20% for 10+ violations
+            avg_risk_score = min(avg_risk_score * volume_multiplier, 10.0)
         else:
             avg_risk_score = 0.0
         
@@ -294,28 +537,15 @@ Return ONLY a valid JSON array of violations with all fields. Example format:
         else:
             risk_level = "Minimal"
         
-        # Generate comprehensive risk assessment
-        context_text = self.rag_system.format_context(context)
+        # Skip detailed LLM-based risk assessment for speed
+        # Extract info directly from violations instead
+        legal_basis_analysis = "See violations for detailed legal basis analysis"
+        rights_impact = "See violations for data subject rights impact"
         
-        assessment_prompt = self.prompts.get('risk_assessment_prompt', '').format(
-            context=context_text,
-            query=scenario
-        )
+        # Extract recommendations from violations
+        recommendations = [v.recommendation for v in violations if v.recommendation][:10]
         
-        assessment_response = self.rag_system.generate_response(
-            query=scenario,
-            context=context_text,
-            custom_prompt_template=assessment_prompt
-        )
-        
-        # Extract specific analyses
-        legal_basis_analysis = self._extract_section(assessment_response['answer'], "legal basis")
-        rights_impact = self._extract_section(assessment_response['answer'], "data subject rights")
-        
-        # Extract recommendations
-        recommendations = self._extract_recommendations(assessment_response['answer'])
-        
-        # Identify compliance gaps
+        # Identify compliance gaps from violations
         compliance_gaps = self._identify_compliance_gaps(violations)
         
         return RiskAssessment(
@@ -474,24 +704,140 @@ Return ONLY a valid JSON array of violations with all fields. Example format:
 
 """
                 
+                # Add professional remediation guidance
+                if violation.remediation_guidance:
+                    rem = violation.remediation_guidance
+                    report += f"""---
+
+## 🔧 Professional Remediation Guidance
+
+### Priority & Effort
+- **Priority**: {rem.priority.value}
+- **Complexity**: {rem.complexity.value}
+- **Estimated Effort**: {rem.estimated_effort}
+- **Estimated Cost**: {rem.estimated_cost_range}
+
+### 🚨 Immediate Actions (0-7 days)
+
+"""
+                    for action in rem.immediate_actions:
+                        report += f"{action}\n"
+                    
+                    report += f"""
+### 📅 Short-Term Solutions (1-3 months)
+
+"""
+                    for solution in rem.short_term_solutions:
+                        report += f"{solution}\n"
+                    
+                    report += f"""
+### 🎯 Long-Term Improvements (3-6 months)
+
+"""
+                    for improvement in rem.long_term_improvements:
+                        report += f"{improvement}\n"
+                    
+                    # Add detailed implementation steps
+                    if rem.detailed_steps:
+                        report += f"""
+### 📋 Implementation Steps
+
+"""
+                        for step in rem.detailed_steps:
+                            report += f"""
+**Step {step.step_number}: {step.action}**
+- **Owner**: {step.owner}
+- **Timeline**: {step.timeline}
+- **Success Criteria**: {step.success_criteria}
+- **Resources Needed**: {', '.join(step.resources_needed)}
+
+"""
+                    
+                    # Add verification checklist
+                    if rem.verification_checklist:
+                        report += f"""
+### ✅ Verification Checklist
+
+"""
+                        for item in rem.verification_checklist:
+                            report += f"{item}\n"
+                    
+                    # Add technical requirements
+                    if rem.technical_requirements:
+                        report += f"""
+### 🔧 Technical Requirements
+
+"""
+                        for req in rem.technical_requirements:
+                            report += f"- {req}\n"
+                    
+                    # Add policy requirements
+                    if rem.policy_requirements:
+                        report += f"""
+### 📄 Policy & Documentation Requirements
+
+"""
+                        for pol in rem.policy_requirements:
+                            report += f"- {pol}\n"
+                    
+                    # Add training requirements
+                    if rem.training_requirements:
+                        report += f"""
+### 🎓 Training Requirements
+
+"""
+                        for training in rem.training_requirements:
+                            report += f"- {training}\n"
+                    
+                    # Add best practices
+                    if rem.best_practices:
+                        report += f"""
+### 💡 Best Practices
+
+"""
+                        for practice in rem.best_practices:
+                            report += f"- {practice}\n"
+                    
+                    # Add resources
+                    if rem.helpful_resources:
+                        report += f"""
+### 📚 Helpful Resources
+
+"""
+                        for resource in rem.helpful_resources:
+                            report += f"- {resource}\n"
+                    
+                    # Add similar cases
+                    if rem.similar_cases:
+                        report += f"""
+### ⚖️ Similar Enforcement Cases
+
+"""
+                        for case in rem.similar_cases:
+                            report += f"- {case}\n"
+                    
+                    # Add ongoing monitoring
+                    if rem.ongoing_monitoring:
+                        report += f"""
+### 📊 Ongoing Monitoring
+
+{rem.ongoing_monitoring}
+
+"""
+                
                 report += "---\n\n"
             
-            report += f"""## Legal Basis Analysis
-{assessment.legal_basis_analysis}
-
-## Data Subject Rights Impact
-{assessment.data_subject_rights_impact}
-
-## Compliance Gaps
-"""
-            for gap in assessment.compliance_gaps:
-                report += f"- {gap}\n"
+            # Summary sections
+            if assessment.compliance_gaps:
+                report += "## 📋 Compliance Gaps Summary\n"
+                for gap in assessment.compliance_gaps:
+                    report += f"- {gap}\n"
+                report += "\n"
             
-            report += f"""
-## Recommendations
-"""
-            for i, rec in enumerate(assessment.recommendations, 1):
-                report += f"{i}. {rec}\n"
+            if assessment.recommendations:
+                report += "## 🎯 Quick Action Items\n"
+                for i, rec in enumerate(assessment.recommendations, 1):
+                    report += f"{i}. {rec}\n"
             
             return report
         

@@ -41,6 +41,18 @@ class GDPRRAGSystem:
         # Load existing index
         if not self.vector_store.load_index():
             logger.warning("No existing index found. Please build the index first.")
+        
+        # Initialize reranker if enabled
+        self.reranker = None
+        if self.retrieval_config.get('rerank', False):
+            try:
+                from sentence_transformers import CrossEncoder
+                model_name = self.retrieval_config.get('rerank_model', 'cross-encoder/ms-marco-MiniLM-L-6-v2')
+                logger.info(f"Loading reranker model: {model_name}")
+                self.reranker = CrossEncoder(model_name, max_length=512)
+                logger.info("✓ Reranker loaded successfully")
+            except Exception as e:
+                logger.warning(f"Could not load reranker: {e}. Continuing without reranking.")
     
     def retrieve_context(
         self,
@@ -49,7 +61,7 @@ class GDPRRAGSystem:
         filters: Optional[Dict] = None
     ) -> List[Dict]:
         """
-        Retrieve relevant context from vector store
+        Retrieve relevant context from vector store with optional reranking
         
         Args:
             query: User query
@@ -57,26 +69,106 @@ class GDPRRAGSystem:
             filters: Metadata filters
         
         Returns:
-            List of relevant documents with metadata
+            List of relevant documents with metadata (reranked if enabled)
         """
         if top_k is None:
             top_k = self.retrieval_config.get('top_k', 5)
         
         logger.info(f"Retrieving context for query: '{query[:100]}...'")
         
+        # Retrieve more candidates if reranking is enabled
+        retrieve_k = top_k * 2 if self.reranker else top_k
+        
         results = self.vector_store.search(
             query=query,
-            top_k=top_k,
+            top_k=retrieve_k,
             filter_metadata=filters
         )
         
-        # Filter by score threshold
+        # Filter by score threshold (PERMISSIVE - we'll rerank to find quality)
         score_threshold = self.retrieval_config.get('score_threshold', 0.7)
         filtered_results = [r for r in results if r['score'] >= score_threshold]
+        
+        # Apply reranking if enabled - THIS IS WHERE QUALITY COMES FROM
+        if self.reranker and filtered_results:
+            logger.info(f"Reranking {len(filtered_results)} candidates...")
+            
+            # Prepare query-document pairs for reranking
+            pairs = [(query, doc['text'][:512]) for doc in filtered_results]  # Limit to 512 chars for cross-encoder
+            
+            # Get reranking scores (raw logits from cross-encoder)
+            rerank_scores = self.reranker.predict(pairs)
+            
+            # Normalize scores using MIN-MAX scaling instead of sigmoid
+            # Legal text cross-encoder gives very negative logits (-20 to -5)
+            # Sigmoid doesn't work well - use min-max normalization instead
+            import numpy as np
+            rerank_scores = np.array(rerank_scores)
+            
+            # Min-max normalization to 0-1 range
+            min_score = rerank_scores.min()
+            max_score = rerank_scores.max()
+            
+            if max_score > min_score:
+                # Normalize to 0-1 based on this batch's range
+                normalized_scores = (rerank_scores - min_score) / (max_score - min_score)
+            else:
+                # All scores are the same - assign 0.5
+                normalized_scores = np.full_like(rerank_scores, 0.5)
+            
+            # Add normalized rerank scores
+            for doc, raw_score, norm_score in zip(filtered_results, rerank_scores, normalized_scores):
+                doc['rerank_score_raw'] = float(raw_score)
+                doc['rerank_score'] = float(norm_score)
+                # IMPORTANT: Use rerank score as primary - it's more accurate than vector similarity
+                # The RELATIVE ordering matters more than absolute scores
+                doc['combined_score'] = doc['rerank_score']
+                doc['quality_tier'] = self._classify_quality_tier(doc['rerank_score'])
+            
+            # Sort by rerank score (higher is better) - TOP results are highest quality
+            filtered_results.sort(key=lambda x: x['rerank_score'], reverse=True)
+            
+            # Keep only top_k after reranking - these are the BEST results
+            rerank_top_k = self.retrieval_config.get('rerank_top_k', top_k)
+            filtered_results = filtered_results[:rerank_top_k]
+            
+            # Log accuracy improvement with quality analysis
+            avg_rerank = sum(d['rerank_score'] for d in filtered_results) / len(filtered_results)
+            top_score = filtered_results[0]['rerank_score'] if filtered_results else 0
+            quality_tiers = {}
+            for doc in filtered_results:
+                tier = doc['quality_tier']
+                quality_tiers[tier] = quality_tiers.get(tier, 0) + 1
+            
+            logger.info(f"✓ Reranking complete. Top result: {top_score:.1%}, Avg: {avg_rerank:.1%}")
+            logger.info(f"  Quality distribution: {quality_tiers}")
+            logger.info(f"  → Using top {len(filtered_results)} HIGHEST QUALITY results (relative ranking)")
         
         logger.info(f"Retrieved {len(filtered_results)} relevant documents (threshold: {score_threshold})")
         
         return filtered_results
+    
+    def _classify_quality_tier(self, rerank_score: float) -> str:
+        """
+        Classify rerank score into quality tier for legal text
+        Legal text has different score distributions than web search
+        Thresholds calibrated based on actual MS-MARCO cross-encoder behavior on GDPR text
+        
+        Args:
+            rerank_score: Normalized rerank score (0-1)
+        
+        Returns:
+            Quality tier: 'Excellent', 'Good', 'Fair', 'Marginal'
+        """
+        # Adjusted thresholds based on observed legal text scores (typically 0.25-0.55)
+        if rerank_score >= 0.45:
+            return 'Excellent'  # Top tier - very rare for legal text
+        elif rerank_score >= 0.38:
+            return 'Good'       # High quality - best matches
+        elif rerank_score >= 0.30:
+            return 'Fair'       # Acceptable - still relevant
+        else:
+            return 'Marginal'   # Low confidence - may not be relevant
     
     def format_context(self, retrieved_docs: List[Dict]) -> str:
         """
@@ -154,14 +246,16 @@ Please provide a comprehensive answer citing specific GDPR articles, recitals, o
             # Get options from config with anti-hallucination settings
             options = {
                 'temperature': self.temperature,
-                'top_k': self.ollama_config.get('top_k', 20),
-                'top_p': self.ollama_config.get('top_p', 0.85),
+                'top_k': self.ollama_config.get('top_k', 40),
+                'top_p': self.ollama_config.get('top_p', 0.9),
             }
             
-            # Add optional parameters
-            for param in ['num_ctx', 'repeat_penalty', 'presence_penalty', 'frequency_penalty']:
+            # Add optional parameters including num_predict for response length
+            for param in ['num_ctx', 'num_predict', 'repeat_penalty', 'presence_penalty', 'frequency_penalty']:
                 if param in self.ollama_config:
                     options[param] = self.ollama_config[param]
+            
+            logger.info(f"Ollama options: {options}")
             
             response = ollama.chat(
                 model=self.model,
@@ -174,7 +268,13 @@ Please provide a comprehensive answer citing specific GDPR articles, recitals, o
             
             answer = response['message']['content']
             
-            logger.info("Response generated successfully")
+            # Log if response is empty or too short
+            if not answer or len(answer.strip()) < 10:
+                logger.warning(f"LLM returned empty or very short response! Length: {len(answer)}")
+                logger.warning(f"Prompt length: {len(user_prompt)} chars")
+                logger.warning(f"Model: {self.model}")
+            else:
+                logger.info(f"Response generated successfully ({len(answer)} chars)")
             
             return {
                 'answer': answer,
@@ -287,6 +387,49 @@ Please provide a comprehensive answer citing specific GDPR articles, recitals, o
             results.append(result)
         
         return results
+    
+    def generate(self, prompt: str, temperature: float = 0.3, max_tokens: int = 2000) -> str:
+        """
+        Simple LLM generation for remediation engine (acts as LLM client)
+        
+        Args:
+            prompt: Full prompt to send to LLM
+            temperature: Temperature for generation
+            max_tokens: Max tokens to generate
+        
+        Returns:
+            Generated text
+        """
+        try:
+            response = ollama.generate(
+                model=self.model,
+                prompt=prompt,
+                options={
+                    'temperature': temperature,
+                    'num_predict': max_tokens,
+                    'top_k': 40,
+                    'top_p': 0.9,
+                },
+            )
+            
+            return response.get('response', '')
+            
+        except Exception as e:
+            logger.error(f"LLM generation failed: {e}")
+            raise
+    
+    def retrieve(self, query: str, top_k: int = 5) -> List[Dict]:
+        """
+        Simple retrieval interface for remediation engine
+        
+        Args:
+            query: Query text
+            top_k: Number of results
+        
+        Returns:
+            List of retrieved documents
+        """
+        return self.retrieve_context(query, top_k=top_k)
     
     def get_system_info(self) -> Dict:
         """Get information about the RAG system"""

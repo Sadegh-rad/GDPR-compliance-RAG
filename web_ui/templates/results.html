@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis Results - GDPR Compliance Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .results-header {
+        background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        padding: var(--spacing-xl);
+        border-radius: var(--radius-lg);
+        margin-bottom: var(--spacing-xl);
+        box-shadow: var(--shadow-lg);
+    }
+    
+    .risk-gauge-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--spacing-xl);
+        flex-wrap: wrap;
+    }
+    
+    .risk-gauge {
+        width: 150px;
+        height: 150px;
+        position: relative;
+    }
+    
+        .risk-gauge-circle {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            {% if result.risk_score >= 8 %}
+            background: conic-gradient(
+                var(--color-critical) 0% {{ (result.risk_score / 10 * 100)|int }}%,
+                var(--bg-elevated) {{ (result.risk_score / 10 * 100)|int }}% 100%
+            );
+            animation: gaugeGlowRed 2s ease-in-out infinite;
+            {% elif result.risk_score >= 6 %}
+            background: conic-gradient(
+                var(--color-high) 0% {{ (result.risk_score / 10 * 100)|int }}%,
+                var(--bg-elevated) {{ (result.risk_score / 10 * 100)|int }}% 100%
+            );
+            animation: gaugeGlowOrange 2s ease-in-out infinite;
+            {% elif result.risk_score >= 4 %}
+            background: conic-gradient(
+                var(--color-medium) 0% {{ (result.risk_score / 10 * 100)|int }}%,
+                var(--bg-elevated) {{ (result.risk_score / 10 * 100)|int }}% 100%
+            );
+            animation: gaugeGlowYellow 2s ease-in-out infinite;
+            {% else %}
+            background: conic-gradient(
+                var(--color-low) 0% {{ (result.risk_score / 10 * 100)|int }}%,
+                var(--bg-elevated) {{ (result.risk_score / 10 * 100)|int }}% 100%
+            );
+            animation: gaugeGlowGreen 2s ease-in-out infinite;
+            {% endif %}
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }    @keyframes gaugeGlowRed {
+        0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+        50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.8); }
+    }
+    
+    @keyframes gaugeGlowOrange {
+        0%, 100% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.5); }
+        50% { box-shadow: 0 0 40px rgba(249, 115, 22, 0.8); }
+    }
+    
+    @keyframes gaugeGlowYellow {
+        0%, 100% { box-shadow: 0 0 20px rgba(234, 179, 8, 0.5); }
+        50% { box-shadow: 0 0 40px rgba(234, 179, 8, 0.8); }
+    }
+    
+    @keyframes gaugeGlowGreen {
+        0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.5); }
+        50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.8); }
+    }
+    
+    .risk-gauge-inner {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: var(--bg-secondary);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .risk-score {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: var(--color-critical);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .risk-label {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+    
+    .metric-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--spacing-md);
+    }
+    
+    .metric-card {
+        background: var(--bg-elevated);
+        padding: var(--spacing-lg);
+        border-radius: var(--radius-md);
+        text-align: center;
+    }
+    
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--btn-primary);
+        margin-bottom: var(--spacing-xs);
+    }
+    
+    .metric-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+    
+    .filter-bar {
+        display: flex;
+        gap: var(--spacing-md);
+        margin-bottom: var(--spacing-lg);
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    
+    .filter-group {
+        display: flex;
+        gap: var(--spacing-sm);
+        align-items: center;
+    }
+    
+    .filter-btn {
+        padding: var(--spacing-sm) var(--spacing-md);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .filter-btn:hover,
+    .filter-btn.active {
+        background: var(--btn-primary);
+        color: white;
+        border-color: var(--btn-primary);
+    }
+    
+    .violation-grid {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+    
+    .violation-card {
+        background: var(--bg-secondary);
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--spacing-lg);
+        position: relative;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--spacing-lg);
+    }
+    
+    .violation-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--btn-primary);
+    }
+    
+    .violation-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    }
+    
+    .violation-card.critical::before { background: var(--color-critical); }
+    .violation-card.high::before { background: var(--color-high); }
+    .violation-card.medium::before { background: var(--color-medium); }
+    .violation-card.low::before { background: var(--color-low); }
+    
+    .violation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .violation-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        flex: 1;
+        margin-right: var(--spacing-md);
+    }
+    
+    .articles-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--spacing-xs);
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .article-chip {
+        background: var(--btn-primary);
+        color: white;
+        padding: var(--spacing-xs) var(--spacing-sm);
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .article-chip:hover {
+        background: var(--btn-primary-hover);
+        box-shadow: var(--glow-blue);
+    }
+    
+    .problematic-text {
+        background: var(--bg-primary);
+        padding: var(--spacing-md);
+        border-radius: var(--radius-md);
+        border-left: 4px solid var(--color-critical);
+        margin: var(--spacing-md) 0;
+        font-style: italic;
+        color: var(--text-secondary);
+    }
+    
+    .violation-actions {
+        display: flex;
+        gap: var(--spacing-sm);
+        margin-top: var(--spacing-md);
+    }
+    
+    .scenario-card {
+        background: var(--bg-elevated);
+        padding: var(--spacing-lg);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--spacing-xl);
+    }
+    
+    .scenario-text {
+        color: var(--text-primary);
+        font-size: 1.15rem;
+        font-weight: 600;
+        line-height: 1.8;
+        white-space: pre-wrap;
+        letter-spacing: 0.01em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Results Header with Risk Gauge -->
+<div class="results-header">
+    <div class="risk-gauge-container">
+        <div class="risk-gauge">
+            <div class="risk-gauge-circle">
+                <div class="risk-gauge-inner">
+                    <div class="risk-score">{{ result.risk_score }}</div>
+                    <div class="risk-label">/10</div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="flex: 1; min-width: 300px;">
+            <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: var(--spacing-sm);">
+                Risk Level: <span class="badge badge-{{ result.risk_level|lower }}">{{ result.risk_level }}</span>
+            </h1>
+            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-lg);">
+                Analysis completed on {{ result.timestamp[:10] }} at {{ result.timestamp[11:16] }}
+            </p>
+            
+            <div class="metric-cards">
+                <div class="metric-card">
+                    <div class="metric-value">{{ result.total_violations }}</div>
+                    <div class="metric-label">Violations Found</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" title="Unique articles referenced across all violations">{{ result.articles_cited }}</div>
+                    <div class="metric-label">Unique Articles Cited</div>
+                    {% set unique_articles = [] %}
+                    {% for violation in result.violations %}
+                        {% for article in violation.articles %}
+                            {% set normalized_article = '' %}
+                            {% if 'Article' in article %}
+                                {% set normalized_article = 'Article ' + article.replace('Article', '').replace('(', '-').replace(')', '').replace('**', '').strip() %}
+                            {% elif 'Recital' in article %}
+                                {% set normalized_article = 'Recital ' + article.replace('Recital', '').replace('(', ' ').replace(')', '').replace('**', '').strip() %}
+                            {% else %}
+                                {% set normalized_article = article.replace('**', '').strip() %}
+                            {% endif %}
+                            {% if normalized_article not in unique_articles %}
+                                {% set _ = unique_articles.append(normalized_article) %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                    <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 4px; max-height: 60px; overflow-y: auto;">
+                        {% for article in unique_articles %}
+                            {{ article }}{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <button class="btn btn-secondary" onclick="GDPRDashboard.exportAnalysis('{{ analysis_id }}', 'pdf')">
+                        <i class="fas fa-download"></i>
+                        Export as PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scenario Card -->
+<div class="scenario-card">
+    <h2 class="card-title" style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-lg);"><i class="fas fa-file-alt"></i> Analyzed Scenario</h2>
+    <div class="scenario-text">{{ result.scenario }}</div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <span style="color: var(--text-secondary); font-weight: 600;">Severity:</span>
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="critical">Critical</button>
+        <button class="filter-btn" data-filter="high">High</button>
+        <button class="filter-btn" data-filter="medium">Medium</button>
+        <button class="filter-btn" data-filter="low">Low</button>
+    </div>
+    
+    <div style="flex: 1;"></div>
+    
+    <div class="filter-group">
+        <input 
+            type="search" 
+            id="searchViolations" 
+            placeholder="Search violations..." 
+            style="padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary);"
+        >
+    </div>
+</div>
+
+<!-- Violations Grid -->
+<div class="violation-grid">
+    {% for violation in result.violations %}
+    <div class="violation-card {{ violation.severity|lower }}" 
+         data-severity="{{ violation.severity|lower }}" 
+         data-search="{{ violation.category|lower }} {{ violation.articles|join(' ')|lower }}">
+        
+        <!-- Left section: Title and Badge -->
+        <div style="flex: 0 0 400px; display: flex; flex-direction: column; gap: var(--spacing-md);">
+            <div class="violation-header" style="display: flex; align-items: center; gap: var(--spacing-md);">
+                <span class="badge badge-{{ violation.severity|lower }}" style="flex-shrink: 0; font-size: 0.75rem;">
+                    {{ violation.severity.replace('**', '').replace('*', '').strip() }}
+                </span>
+                <div class="violation-title" style="flex: 1; font-size: 1.1rem; line-height: 1.5; font-weight: 600;">
+                    {{ violation.category.replace('**', '').replace('*', '').strip() }}
+                </div>
+            </div>
+            
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                {% for article in violation.articles %}
+                    {% if 'Article' in article %}
+                        <span style="margin-right: 8px;">Article {{ article.replace('Article', '').replace('(', '-').replace(')', '').replace('**', '').replace('*', '').strip() }}</span>
+                    {% elif 'Recital' in article %}
+                        <span style="margin-right: 8px;">Recital {{ article.replace('Recital', '').replace('(', ' ').replace(')', '').replace('**', '').replace('*', '').strip() }}</span>
+                    {% else %}
+                        <span style="margin-right: 8px;">{{ article.replace('**', '').replace('*', '').strip() }}</span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Middle section: Risk Score -->
+        <div style="flex: 0 0 120px; display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); padding: 0 var(--spacing-md);">
+            <div style="text-align: center;">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: var(--spacing-xs);">
+                    Risk Score
+                </div>
+                <div style="font-size: 1.75rem; font-weight: 700; color: var(--color-{{ violation.severity|lower }}); font-family: 'JetBrains Mono', monospace;">
+                    {{ violation.risk_score }}/10
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right section: Problematic Text and Actions -->
+        <div style="flex: 1; display: flex; flex-direction: column; gap: var(--spacing-md);">
+            {% if violation.problematic_text %}
+            <div class="problematic-text" style="margin-bottom: 0;">
+                <strong>Problematic Text:</strong><br>
+                {{ violation.problematic_text[:150] }}{% if violation.problematic_text|length > 150 %}...{% endif %}
+            </div>
+            {% endif %}
+            
+            <div class="violation-actions" style="display: flex; gap: var(--spacing-sm); justify-content: flex-start;">
+                <a href="{{ url_for('violation_detail', analysis_id=analysis_id, violation_index=loop.index0) }}" 
+                   class="btn btn-primary btn-sm">
+                    <i class="fas fa-eye"></i>
+                    View Details
+                </a>
+                <a href="{{ url_for('remediation_page', analysis_id=analysis_id, violation_index=loop.index0) }}" 
+                   class="btn btn-secondary btn-sm">
+                    <i class="fas fa-tools"></i>
+                    Remediation
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+// Filter functionality
+const filterBtns = document.querySelectorAll('.filter-btn');
+const violationCards = document.querySelectorAll('.violation-card');
+const searchInput = document.getElementById('searchViolations');
+
+filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Update active state
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        const filter = btn.dataset.filter;
+        
+        violationCards.forEach(card => {
+            if (filter === 'all' || card.dataset.severity === filter) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Search functionality
+searchInput?.addEventListener('input', (e) => {
+    const searchTerm = e.target.value.toLowerCase();
+    
+    violationCards.forEach(card => {
+        const searchText = card.dataset.search;
+        if (searchText.includes(searchTerm)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

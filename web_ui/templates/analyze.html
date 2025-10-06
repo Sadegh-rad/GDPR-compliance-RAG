@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}Analyze Scenario - GDPR Compliance Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .analyze-container {
+        display: grid;
+        grid-template-columns: 40% 60%;
+        gap: var(--spacing-xl);
+    }
+    
+    @media (max-width: 1024px) {
+        .analyze-container {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .input-section {
+        position: sticky;
+        top: 80px;
+        height: fit-content;
+    }
+    
+    .textarea-wrapper {
+        position: relative;
+        margin-bottom: var(--spacing-md);
+    }
+    
+    #scenarioText {
+        width: 100%;
+        min-height: 300px;
+        padding: var(--spacing-md);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-md);
+        font-family: inherit;
+        font-size: 1rem;
+        line-height: 1.6;
+        resize: vertical;
+        transition: border-color 0.3s ease;
+    }
+    
+    #scenarioText:focus {
+        outline: none;
+        border-color: var(--btn-primary);
+        box-shadow: var(--glow-blue);
+    }
+    
+    .char-count {
+        position: absolute;
+        bottom: var(--spacing-sm);
+        right: var(--spacing-sm);
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        font-family: 'JetBrains Mono', monospace;
+        background: var(--bg-secondary);
+        padding: var(--spacing-xs) var(--spacing-sm);
+        border-radius: var(--radius-sm);
+    }
+    
+    .save-indicator {
+        color: var(--color-success);
+        font-size: 0.9rem;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        margin-bottom: var(--spacing-sm);
+    }
+    
+    .config-panel {
+        background: var(--bg-elevated);
+        padding: var(--spacing-md);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .config-title {
+        font-weight: 600;
+        margin-bottom: var(--spacing-md);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+    }
+    
+    .config-content {
+        display: none;
+    }
+    
+    .config-content.active {
+        display: block;
+    }
+    
+    .slider-wrapper {
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .slider-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: var(--spacing-sm);
+        font-size: 0.9rem;
+    }
+    
+    input[type="range"] {
+        width: 100%;
+        height: 6px;
+        border-radius: var(--radius-full);
+        background: var(--bg-primary);
+        outline: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--btn-primary);
+        cursor: pointer;
+        box-shadow: var(--glow-blue);
+    }
+    
+    .checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+    
+    .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+    }
+    
+    .checkbox-item input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .template-card {
+        background: var(--bg-primary);
+        padding: var(--spacing-md);
+        border-radius: var(--radius-md);
+        border: 2px solid var(--border-color);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: var(--spacing-sm);
+    }
+    
+    .template-card:hover {
+        border-color: var(--btn-primary);
+        transform: translateX(4px);
+    }
+    
+    .template-name {
+        font-weight: 600;
+        margin-bottom: var(--spacing-xs);
+        color: var(--text-primary);
+    }
+    
+    .template-preview {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: var(--spacing-md);
+        margin-top: var(--spacing-md);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-lg">
+    <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: var(--spacing-sm);">
+        <i class="fas fa-search"></i>
+        Analyze GDPR Scenario
+    </h1>
+    <p style="color: var(--text-secondary);">
+        Describe your data processing scenario and get professional compliance analysis
+    </p>
+</div>
+
+<div class="analyze-container">
+    <!-- Left Panel: Input Section -->
+    <div class="input-section">
+        <div class="card">
+            <h2 class="card-title">Scenario Description</h2>
+            
+            <div id="saveIndicator" class="save-indicator">
+                💾 Draft saved
+            </div>
+            
+            <div class="textarea-wrapper">
+                <textarea 
+                    id="scenarioText" 
+                    placeholder="Describe your data processing scenario...
+
+Example:
+Our mobile app collects user location data every 5 minutes without asking permission. We use this data to build advertising profiles and sell these profiles to data brokers. Users cannot see what data we collected or delete it. We don't have a privacy policy."
+                ></textarea>
+                <div id="charCount" class="char-count">0/5000 characters</div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary btn-lg" id="analyzeBtn">
+                    <i class="fas fa-rocket"></i>
+                    Analyze Scenario
+                </button>
+                <button class="btn btn-secondary" id="clearBtn">
+                    <i class="fas fa-eraser"></i>
+                    Clear
+                </button>
+            </div>
+        </div>
+        
+        <!-- Configuration Panel -->
+        <div class="config-panel">
+            <div class="config-title" onclick="toggleConfig('sensitivity')">
+                <span><i class="fas fa-sliders-h"></i> Sensitivity</span>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+            <div class="config-content" id="sensitivity">
+                <div class="slider-wrapper">
+                    <div class="slider-label">
+                        <span>Detection Level</span>
+                        <span id="sensitivityValue">Medium</span>
+                    </div>
+                    <input type="range" id="sensitivitySlider" min="1" max="3" value="2" step="1">
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary);">
+                    Higher sensitivity detects more potential violations
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Panel: Templates & Preview -->
+    <div class="right-section">
+        <!-- Quick Templates -->
+        <div class="card mb-lg">
+            <h2 class="card-title">Quick Templates</h2>
+            <p class="card-subtitle">Click to load a pre-written scenario</p>
+            
+            {% for template in templates %}
+            <div class="template-card" onclick="loadTemplate({{ loop.index0 }})">
+                <div class="template-name">
+                    <i class="fas fa-file-alt"></i>
+                    {{ template.name }}
+                </div>
+                <div class="template-preview">{{ template.scenario }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+// Templates data
+const templates = {{ templates | tojson }};
+
+// Load template
+function loadTemplate(index) {
+    const template = templates[index];
+    document.getElementById('scenarioText').value = template.scenario;
+    GDPRDashboard.showToast('Template loaded: ' + template.name, 'success');
+}
+
+// Toggle config panel
+function toggleConfig(id) {
+    const content = document.getElementById(id);
+    content.classList.toggle('active');
+}
+
+// Update sensitivity value
+document.getElementById('sensitivitySlider')?.addEventListener('input', (e) => {
+    const value = e.target.value;
+    const labels = ['Low', 'Medium', 'High'];
+    document.getElementById('sensitivityValue').textContent = labels[value - 1];
+});
+
+// Listen for input - removed preview functionality
+
+// Clear button
+document.getElementById('clearBtn')?.addEventListener('click', () => {
+    if (confirm('Are you sure you want to clear the scenario?')) {
+        document.getElementById('scenarioText').value = '';
+        localStorage.removeItem('gdpr_scenario_draft');
+    }
+});
+
+// Analyze button
+document.getElementById('analyzeBtn')?.addEventListener('click', async () => {
+    const scenario = document.getElementById('scenarioText').value;
+    
+    if (!GDPRDashboard.validateScenario(scenario)) {
+        return;
+    }
+    
+    // Show loading
+    GDPRDashboard.showLoading('Initializing analysis...');
+    const progressInterval = GDPRDashboard.simulateAnalysisProgress();
+    
+    try {
+        const result = await GDPRDashboard.analyzeScenario(scenario);
+        
+        clearInterval(progressInterval);
+        GDPRDashboard.updateLoadingProgress(100, '✅ Analysis complete!');
+        
+        // Redirect to results
+        setTimeout(() => {
+            window.location.href = result.redirect;
+        }, 1000);
+        
+    } catch (error) {
+        clearInterval(progressInterval);
+        GDPRDashboard.hideLoading();
+        GDPRDashboard.showToast('Analysis failed: ' + error.message, 'error', 'Error');
+    }
+});
+</script>
+{% endblock %}

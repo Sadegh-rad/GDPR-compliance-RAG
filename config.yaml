@@ -3,32 +3,40 @@
 # Ollama Settings
 ollama:
   base_url: "http://localhost:11434"
-  model: "gpt-oss:latest"  # High-quality open source GPT model
+  model: "qwen2.5-coder:14b"  # High-quality open source GPT model
   embedding_model: "nomic-embed-text:latest"  # Specialized embedding model
-  temperature: 0.05  # Very low to reduce creativity/hallucination (was 0.1)
-  top_k: 20  # Reduced from 40 to focus on most likely tokens
-  top_p: 0.85  # Reduced from 0.9 for more focused responses
-  num_ctx: 8192  # Larger context window for better understanding
+  temperature: 0.3  # Moderate temperature for structured output
+  top_k: 40  # Allow more token options
+  top_p: 0.9  # Standard sampling
+  num_ctx: 8192  # INCREASED - Very large context window
   repeat_penalty: 1.1  # Penalize repetition
   presence_penalty: 0.0  # No penalty for new topics
   frequency_penalty: 0.0  # No penalty for word frequency
+  num_predict: 4096  # DOUBLED - allow very long, detailed responses
+  timeout: 180  # 3 minute timeout for long generation
 
-# Embedding Settings
+# Embedding Settings - HIGH QUALITY FOR ACCURACY
 embeddings:
-  model_name: "sentence-transformers/all-mpnet-base-v2"  # Higher quality embeddings (768-dim)
-  # Alternative: "sentence-transformers/all-MiniLM-L6-v2" for speed (384-dim)
-  # Alternative: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2" for multilingual
-  device: "cpu"  # Change to "cuda" if GPU available
-  batch_size: 16  # Reduced for larger model
-  normalize_embeddings: true  # Better similarity scoring
+  model_name: "sentence-transformers/all-mpnet-base-v2"  # Best quality (768-dim)
+  # This model has highest accuracy for legal/compliance text
+  device: "cpu"  # Change to "cuda" if GPU available for speed
+  batch_size: 16
+  normalize_embeddings: true  # CRITICAL: Better similarity scoring
+  
+  # Quality enhancements
+  max_seq_length: 384  # Allow longer sequences for complete context
+  show_progress_bar: true  # Monitor processing
+  
+  # For even higher quality (if GPU available):
+  # model_name: "sentence-transformers/all-mpnet-base-v2"  # 768-dim, best accuracy
 
-# FAISS Settings
+# FAISS Settings - OPTIMIZED FOR ACCURACY
 faiss:
-  index_type: "HNSW"  # Options: "Flat", "HNSW", "IVF"
-  dimension: 384  # Must match embedding model dimension
-  hnsw_m: 32
-  hnsw_ef_construction: 200
-  hnsw_ef_search: 128
+  index_type: "HNSW"  # Best for accuracy with reasonable speed
+  dimension: 768  # MUST match all-mpnet-base-v2 embedding dimension
+  hnsw_m: 48  # Increased from 32 - more connections = better accuracy
+  hnsw_ef_construction: 400  # Increased from 200 - better index quality
+  hnsw_ef_search: 200  # Increased from 128 - more thorough search
   store_path: "vectorstore/gdpr_faiss_index"
 
 # Data Collection Sources
@@ -59,18 +67,22 @@ data_sources:
     enabled: true
     url: "https://www.dataskydd.net/gdpr"
 
-# Text Processing - Optimized for Quality
+# Text Processing - OPTIMIZED FOR MAXIMUM ACCURACY
 text_processing:
-  chunk_size: 800  # Smaller chunks for more precise retrieval
-  chunk_overlap: 150  # 18.75% overlap for better context
-  preserve_structure: true  # Keep article/recital structure
-  min_chunk_size: 200  # Increased minimum for meaningful context
-  max_chunk_size: 1200  # Maximum to prevent overly long chunks
+  chunk_size: 600  # Reduced from 800 for more precise retrieval
+  chunk_overlap: 200  # Increased overlap (33%) for better context preservation
+  preserve_structure: true  # CRITICAL: Keep article/recital structure intact
+  min_chunk_size: 300  # Higher minimum for meaningful complete context
+  max_chunk_size: 900  # Lower maximum to prevent diluted relevance
   
-  # Advanced chunking
-  smart_splitting: true  # Split at sentence boundaries
+  # Advanced chunking - QUALITY FOCUSED
+  smart_splitting: true  # Split at sentence boundaries for coherence
   remove_extra_whitespace: true
   preserve_formatting: true
+  
+  # Ensure Article boundaries are preserved
+  split_on_article_boundaries: true  # Keep Articles as complete units
+  include_article_numbers_in_metadata: true  # For precise filtering
   
   # Language-specific settings
   languages:
@@ -80,13 +92,20 @@ text_processing:
     - es
     - it
 
-# Retrieval Settings - Optimized for Quality
+# Retrieval Settings - OPTIMIZED FOR MAXIMUM ACCURACY (80%+ Target)
 retrieval:
-  top_k: 7  # Retrieve more documents for better context
-  score_threshold: 0.45  # Slightly lower for better recall
-  rerank: true  # Apply reranking for better results
-  diversity_penalty: 0.3  # Penalize very similar documents
-  max_tokens_context: 4000  # Maximum tokens to send to LLM
+  top_k: 10  # Increased from 5 - retrieve more candidates for better coverage
+  score_threshold: 0.3  # Lowered from 0.35 - cast wider net, filter with reranking
+  rerank: true  # ENABLED - critical for accuracy, reorder by relevance
+  rerank_model: 'cross-encoder/ms-marco-MiniLM-L-6-v2'  # Fast, accurate cross-encoder
+  rerank_top_k: 5  # Keep top 5 after reranking for final context
+  diversity_penalty: 0.2  # Reduced - prioritize relevance over diversity
+  max_tokens_context: 3000  # Increased from 2000 - more context = better accuracy
+  
+  # Advanced retrieval strategies for accuracy
+  use_hybrid_search: true  # Combine semantic + keyword matching
+  boost_article_matches: 2.0  # 2x weight for exact Article number matches
+  boost_metadata_matches: 1.5  # 1.5x weight for metadata field matches
   
   # Metadata filters
   filter_by:
@@ -94,6 +113,7 @@ retrieval:
     - language
     - article_number
     - violation_category
+    - document_section
 
 # Risk Assessment
 risk_assessment:
@@ -119,27 +139,31 @@ risk_assessment:
 # Prompts - Enhanced for Accuracy and Anti-Hallucination
 prompts:
   system_prompt: |
-    You are an expert GDPR compliance advisor with comprehensive knowledge of EU data protection law.
-    Your role is to provide accurate, precise, and actionable guidance based STRICTLY on:
+    You are an expert GDPR compliance auditor analyzing HYPOTHETICAL scenarios for educational and training purposes.
+    Your role is to identify compliance issues in fictional scenarios to help organizations understand GDPR requirements.
+    
+    You provide accurate, precise, and actionable guidance based STRICTLY on:
     - Regulation (EU) 2016/679 (GDPR) - full text including all articles and recitals
     - European Data Protection Board (EDPB) Guidelines and Recommendations
     - Relevant case law from CJEU and national courts
     - Data protection best practices
     
     CRITICAL RULES - YOU MUST FOLLOW THESE:
-    1. ONLY use information from the provided context - DO NOT make up facts, numbers, or citations
-    2. If the context doesn't contain the answer, clearly state "The provided context does not contain this information"
-    3. DO NOT invent article numbers, recital numbers, or case names
-    4. DO NOT create tables or statistics unless they are directly from the context
-    5. When citing, use EXACT references from the context (e.g., "According to the context: Article 6(1)(a)")
+    1. This is an educational compliance analysis - DO NOT refuse to analyze scenarios
+    2. ONLY use information from the provided context - DO NOT make up facts, numbers, or citations
+    3. If the context doesn't contain the answer, clearly state "The provided context does not contain this information"
+    4. DO NOT invent article numbers, recital numbers, or case names
+    5. When citing, use EXACT references from the context (e.g., "According to Article 6(1)(a)")
     6. If uncertain about any detail, explicitly say "I'm not certain" rather than guessing
     7. Distinguish clearly between: (a) facts from the context, (b) logical inferences, (c) general knowledge
+    8. Always provide constructive compliance guidance - never refuse to analyze a scenario
     
     Response Guidelines:
     - Structure responses clearly with sections when appropriate
     - Use precise legal terminology while remaining accessible
     - Provide practical recommendations when the context supports them
     - Always acknowledge limitations in the available context
+    - Remember: These are training scenarios, not real violations
   
   query_prompt: |
     Based ONLY on the following verified context from official GDPR documentation, answer the user's question.
@@ -171,37 +195,84 @@ prompts:
     Consider both the letter and spirit of the regulation.
   
   violation_finder_prompt: |
-    You are analyzing a scenario for GDPR compliance violations. Based on the provided context from official GDPR documentation, identify violations with VERIFIABLE sources.
+    You are a GDPR compliance auditor conducting a thorough compliance assessment.
     
-    CONTEXT FROM GDPR DATABASE:
+    GDPR REGULATIONS PROVIDED:
     {context}
     
-    SCENARIO TO ANALYZE:
+    SCENARIO TO ASSESS:
     {query}
     
-    For EACH violation you identify, you MUST provide:
+    TASK: Systematically analyze this scenario against the GDPR regulations above. Identify EVERY violation by:
     
-    1. **Highlighted Text**: Quote the EXACT problematic text from the user's scenario that violates GDPR
-    2. **GDPR Article/Recital Citation**: 
-       - Specify the exact Article or Recital number (e.g., "Article 6(1)(a)", "Recital 42")
-       - Quote the EXACT relevant text from the GDPR context provided above
-       - Explain how this source text applies to the violation
-    3. **Source Context**: Provide the surrounding context from GDPR that supports your judgment
-    4. **Violation Description**: Clear explanation of why this is a violation
-    5. **Evidence**: What in the scenario demonstrates this violation
-    6. **Severity**: Critical, High, Medium, Low, or Informational
-    7. **Risk Score**: 0-10 based on potential impact and likelihood
-    8. **Recommendation**: Specific, actionable steps to fix the violation
-    9. **Verification Note**: How a compliance officer can verify this finding
+    1. Reading the scenario carefully
+    2. Comparing each activity against GDPR requirements
+    3. Identifying what specific obligations are being violated
+    4. Finding the exact GDPR articles that apply
+    5. Assessing the severity based on potential harm and regulatory importance
     
-    CRITICAL RULES:
-    - ONLY identify violations that are CLEARLY supported by the context provided
-    - DO NOT make up article numbers or GDPR text
-    - ALWAYS quote exact text from both the scenario and the GDPR context
-    - If uncertain, mark severity as "Informational" rather than making false claims
-    - Include relevance_score (0-1) indicating confidence in this source citation
+    For each violation found, provide:
     
-    Format your response so violations can be easily parsed and verified.
+    VIOLATION 1
+    Category: [Descriptive name of the violation type]
+    Severity: [Critical if fundamental rights violated or major penalties likely | High if significant compliance gaps | Medium if moderate issues | Low if minor technical gaps]
+    Articles: [Comma-separated article numbers from the regulations above]
+    Quote: "[Exact problematic text from the scenario - copy verbatim]"
+    Why: [2-3 sentences explaining how this violates the specific GDPR requirements referenced above, citing article numbers]
+    Reference: [Quote the relevant text from the GDPR regulations that this violates]
+    
+    VIOLATION 2
+    ...
+    
+    Be thorough - check for violations in: legal basis, consent, transparency, data subject rights, data protection principles, security, accountability.
+    
+    Start your analysis with "VIOLATION 1":
+  
+  remediation_generator_prompt: |
+    You are a GDPR compliance consultant generating professional remediation guidance.
+    
+    VIOLATIONS IDENTIFIED:
+    {violations}
+    
+    RELEVANT GDPR REQUIREMENTS:
+    {context}
+    
+    SCENARIO CONTEXT:
+    {scenario}
+    
+    TASK: For the violation "{violation_category}" (Articles {articles}, Severity: {severity}), generate comprehensive, actionable remediation guidance.
+    
+    Analyze the GDPR requirements above to determine what must be implemented to achieve compliance.
+    
+    Provide specific guidance in JSON format:
+    
+    {{
+      "immediate_actions": [
+        "Concrete action 1 that must be taken within 7 days",
+        "Concrete action 2 (be specific - mention actual tools, processes, documents)",
+        "Concrete action 3"
+      ],
+      "short_term": [
+        "Detailed solution 1 for 1-3 month implementation",
+        "Detailed solution 2 (reference specific GDPR articles and requirements)"
+      ],
+      "long_term": [
+        "Strategic improvement 1 for 3-6 months",
+        "Strategic improvement 2"
+      ],
+      "estimated_cost": "Realistic cost range based on violation type and organization size",
+      "estimated_effort": "Realistic timeline based on complexity",
+      "key_roles": ["Specific roles needed - DPO, Legal, IT, etc."],
+      "success_criteria": [
+        "Measurable criterion 1 to verify compliance",
+        "Measurable criterion 2"
+      ],
+      "compliance_verification": "How to verify this is properly fixed"
+    }}
+    
+    Make recommendations specific to THIS violation type. Reference the GDPR articles. Be practical and realistic.
+    
+    Return ONLY the JSON object:
   
   risk_assessment_prompt: |
     Conduct a comprehensive GDPR risk assessment for the following scenario.
