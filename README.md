@@ -6,8 +6,18 @@ A smart AI assistant that helps you understand and comply with GDPR regulations.
 
 - **Answer GDPR Questions**: Ask anything about GDPR and get detailed, accurate answers
 - **Check Compliance**: Describe your data practice and get instant risk assessment
-- **Find Violations**: Automatically detect GDPR violations in your scenarios
-- **Cite Sources**: Every answer includes references to specific GDPR articles
+- **Find Violations**: Automatically detect GDPR violations with highlighted text and exact GDPR citations
+- **Cite Sources**: Every answer includes references to specific GDPR articles with quoted text
+- **Verify Findings**: Professional reports with verification steps for compliance officers
+
+## ✨ New Features
+
+### Enhanced Violation Detection
+- **🔴 Text Highlighting**: Directly quotes problematic text from your documents
+- **📚 Source Citations**: Cites specific GDPR Articles/Recitals with exact quotes
+- **✓ Verification**: Provides context for lawyers and compliance officers to verify findings
+
+[Learn more about enhanced violations →](docs/ENHANCED_VIOLATIONS_GUIDE.md)
 
 ## Quick Start
 

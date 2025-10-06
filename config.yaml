@@ -171,16 +171,37 @@ prompts:
     Consider both the letter and spirit of the regulation.
   
   violation_finder_prompt: |
-    Based on the following context from GDPR documents and case law, identify any potential
-    GDPR violations in the described scenario. For each violation:
-    1. Specify the relevant GDPR article(s)
-    2. Explain why it constitutes a violation
-    3. Assess the severity (Critical/High/Medium/Low)
-    4. Provide recommendations for remediation
+    You are analyzing a scenario for GDPR compliance violations. Based on the provided context from official GDPR documentation, identify violations with VERIFIABLE sources.
     
-    Context: {context}
+    CONTEXT FROM GDPR DATABASE:
+    {context}
     
-    Scenario: {query}
+    SCENARIO TO ANALYZE:
+    {query}
+    
+    For EACH violation you identify, you MUST provide:
+    
+    1. **Highlighted Text**: Quote the EXACT problematic text from the user's scenario that violates GDPR
+    2. **GDPR Article/Recital Citation**: 
+       - Specify the exact Article or Recital number (e.g., "Article 6(1)(a)", "Recital 42")
+       - Quote the EXACT relevant text from the GDPR context provided above
+       - Explain how this source text applies to the violation
+    3. **Source Context**: Provide the surrounding context from GDPR that supports your judgment
+    4. **Violation Description**: Clear explanation of why this is a violation
+    5. **Evidence**: What in the scenario demonstrates this violation
+    6. **Severity**: Critical, High, Medium, Low, or Informational
+    7. **Risk Score**: 0-10 based on potential impact and likelihood
+    8. **Recommendation**: Specific, actionable steps to fix the violation
+    9. **Verification Note**: How a compliance officer can verify this finding
+    
+    CRITICAL RULES:
+    - ONLY identify violations that are CLEARLY supported by the context provided
+    - DO NOT make up article numbers or GDPR text
+    - ALWAYS quote exact text from both the scenario and the GDPR context
+    - If uncertain, mark severity as "Informational" rather than making false claims
+    - Include relevance_score (0-1) indicating confidence in this source citation
+    
+    Format your response so violations can be easily parsed and verified.
   
   risk_assessment_prompt: |
     Conduct a comprehensive GDPR risk assessment for the following scenario.

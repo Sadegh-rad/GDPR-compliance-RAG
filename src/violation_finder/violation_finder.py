@@ -21,8 +21,18 @@ from rag.gdpr_rag import GDPRRAGSystem
 
 
 @dataclass
+class SourceCitation:
+    """Represents a citation from GDPR source documents"""
+    article_or_recital: str  # e.g., "Article 6(1)(a)", "Recital 42"
+    quoted_text: str  # Exact quote from GDPR
+    source_document: str  # e.g., "GDPR Regulation (EU) 2016/679"
+    context: str  # Additional context around the quote
+    relevance_score: float  # How relevant this source is (0-1)
+
+
+@dataclass
 class GDPRViolation:
-    """Represents a potential GDPR violation"""
+    """Represents a potential GDPR violation with verifiable sources"""
     category: str
     severity: str  # Critical, High, Medium, Low, Informational
     articles: List[str]
@@ -30,6 +40,11 @@ class GDPRViolation:
     evidence: str
     recommendation: str
     risk_score: float  # 0-10
+    
+    # New fields for enhanced verification
+    highlighted_text: Optional[str] = None  # Problematic text from user's document
+    source_citations: Optional[List[SourceCitation]] = None  # GDPR sources used
+    verification_notes: Optional[str] = None  # How to verify this finding
 
 
 @dataclass
@@ -135,10 +150,10 @@ class GDPRViolationFinder:
         return violations
     
     def _parse_violations_from_response(self, response: str, context: List[Dict]) -> List[GDPRViolation]:
-        """Parse structured violations from LLM response"""
+        """Parse structured violations from LLM response with enhanced source tracking"""
         violations = []
         
-        # Use LLM to structure the response into JSON
+        # Use LLM to structure the response into JSON with enhanced fields
         structure_prompt = f"""Based on the following violation analysis, extract structured information about each violation.
 
 For each violation, provide:
@@ -149,26 +164,78 @@ For each violation, provide:
 - evidence: Evidence from the scenario
 - recommendation: How to remediate
 - risk_score: Score from 0-10
+- highlighted_text: EXACT quote from the scenario showing the problem (required)
+- source_citations: Array of objects with:
+  - article_or_recital: e.g., "Article 6(1)(a)" or "Recital 42"
+  - quoted_text: Exact quote from GDPR
+  - source_document: e.g., "GDPR Regulation (EU) 2016/679"
+  - context: Additional context from GDPR
+  - relevance_score: 0-1 confidence score
+- verification_notes: How to verify this finding
 
 Analysis:
 {response}
 
-Return ONLY a JSON array of violations, no other text."""
+Return ONLY a valid JSON array of violations with all fields. Example format:
+[
+  {{
+    "category": "Legal Basis",
+    "severity": "Critical",
+    "articles": ["Article 6(1)"],
+    "description": "Processing without legal basis",
+    "evidence": "No consent mechanism",
+    "recommendation": "Implement consent collection",
+    "risk_score": 8.5,
+    "highlighted_text": "We collect email addresses without explicit consent",
+    "source_citations": [
+      {{
+        "article_or_recital": "Article 6(1)(a)",
+        "quoted_text": "Processing shall be lawful only if and to the extent that at least one of the following applies: (a) the data subject has given consent",
+        "source_document": "GDPR Regulation (EU) 2016/679",
+        "context": "Article 6 defines lawful basis for processing",
+        "relevance_score": 0.95
+      }}
+    ],
+    "verification_notes": "Check privacy policy for consent mechanism"
+  }}
+]"""
         
         try:
             structure_response = ollama.chat(
                 model=self.rag_system.model,
                 messages=[
-                    {'role': 'system', 'content': 'You are a JSON extraction assistant. Return only valid JSON.'},
+                    {'role': 'system', 'content': 'You are a JSON extraction assistant. Return only valid JSON arrays. Ensure all strings are properly escaped.'},
                     {'role': 'user', 'content': structure_prompt}
                 ],
                 options={'temperature': 0.1}
             )
             
             # Try to parse JSON
-            structured_data = json.loads(structure_response['message']['content'])
+            json_text = structure_response['message']['content'].strip()
+            
+            # Clean up markdown code blocks if present
+            if json_text.startswith('```'):
+                json_text = json_text.split('```')[1]
+                if json_text.startswith('json'):
+                    json_text = json_text[4:]
+                json_text = json_text.strip()
+            
+            structured_data = json.loads(json_text)
             
             for v_data in structured_data:
+                # Parse source citations
+                source_citations = []
+                if 'source_citations' in v_data and v_data['source_citations']:
+                    for cit_data in v_data['source_citations']:
+                        citation = SourceCitation(
+                            article_or_recital=cit_data.get('article_or_recital', 'Unknown'),
+                            quoted_text=cit_data.get('quoted_text', ''),
+                            source_document=cit_data.get('source_document', 'GDPR'),
+                            context=cit_data.get('context', ''),
+                            relevance_score=float(cit_data.get('relevance_score', 0.5))
+                        )
+                        source_citations.append(citation)
+                
                 violation = GDPRViolation(
                     category=v_data.get('category', 'Unknown'),
                     severity=v_data.get('severity', 'Medium'),
@@ -176,11 +243,14 @@ Return ONLY a JSON array of violations, no other text."""
                     description=v_data.get('description', ''),
                     evidence=v_data.get('evidence', ''),
                     recommendation=v_data.get('recommendation', ''),
-                    risk_score=float(v_data.get('risk_score', 5.0))
+                    risk_score=float(v_data.get('risk_score', 5.0)),
+                    highlighted_text=v_data.get('highlighted_text'),
+                    source_citations=source_citations if source_citations else None,
+                    verification_notes=v_data.get('verification_notes')
                 )
                 violations.append(violation)
                 
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"Could not parse structured violations: {e}")
             # Fallback: create a single violation from the full response
             violations.append(GDPRViolation(
@@ -190,7 +260,10 @@ Return ONLY a JSON array of violations, no other text."""
                 description="Multiple potential violations identified",
                 evidence=response[:500],
                 recommendation="Conduct detailed compliance review",
-                risk_score=5.0
+                risk_score=5.0,
+                highlighted_text=None,
+                source_citations=None,
+                verification_notes="Manual review required due to parsing error"
             ))
         
         return violations
@@ -316,12 +389,21 @@ Return ONLY a JSON array of violations, no other text."""
             Formatted report
         """
         if format == "json":
+            # Convert violations with proper dataclass handling
+            violations_data = []
+            for v in assessment.violations:
+                v_dict = asdict(v)
+                # Convert SourceCitation objects if present
+                if v.source_citations:
+                    v_dict['source_citations'] = [asdict(cit) for cit in v.source_citations]
+                violations_data.append(v_dict)
+            
             return json.dumps({
                 "scenario": scenario,
                 "assessment": {
                     "overall_risk_level": assessment.overall_risk_level,
                     "risk_score": assessment.risk_score,
-                    "violations": [asdict(v) for v in assessment.violations],
+                    "violations": violations_data,
                     "compliance_gaps": assessment.compliance_gaps,
                     "recommendations": assessment.recommendations,
                     "legal_basis_analysis": assessment.legal_basis_analysis,
@@ -350,13 +432,49 @@ Return ONLY a JSON array of violations, no other text."""
 
 **Description**: {violation.description}
 
-**Evidence**: {violation.evidence}
-
-**Recommendation**: {violation.recommendation}
-
----
+"""
+                # Add highlighted problematic text
+                if violation.highlighted_text:
+                    report += f"""#### 🔴 Problematic Text from Your Document
+```
+{violation.highlighted_text}
+```
 
 """
+                
+                report += f"""**Evidence**: {violation.evidence}
+
+"""
+                
+                # Add GDPR source citations
+                if violation.source_citations:
+                    report += f"""#### 📚 GDPR Source Citations
+
+"""
+                    for j, citation in enumerate(violation.source_citations, 1):
+                        report += f"""##### Citation {j}: {citation.article_or_recital}
+**Source**: {citation.source_document}  
+**Relevance**: {citation.relevance_score:.0%}
+
+**Quoted from GDPR**:
+> {citation.quoted_text}
+
+**Context**: {citation.context}
+
+"""
+                
+                report += f"""**Recommendation**: {violation.recommendation}
+
+"""
+                
+                # Add verification notes
+                if violation.verification_notes:
+                    report += f"""#### ✓ Verification
+{violation.verification_notes}
+
+"""
+                
+                report += "---\n\n"
             
             report += f"""## Legal Basis Analysis
 {assessment.legal_basis_analysis}
@@ -410,6 +528,52 @@ Return ONLY a JSON array of violations, no other text."""
             "analysis": result['answer'],
             "relevant_sources": result.get('sources', [])
         }
+    
+    def analyze_document(
+        self,
+        document_text: str,
+        document_type: str = "privacy_policy",
+        line_by_line: bool = False
+    ) -> RiskAssessment:
+        """
+        Analyze a user document (privacy policy, terms of service, etc.) for GDPR compliance.
+        Highlights specific problematic sections with line/paragraph references.
+        
+        Args:
+            document_text: Full text of the document to analyze
+            document_type: Type of document (privacy_policy, terms_of_service, consent_form, etc.)
+            line_by_line: If True, analyze line by line (slower but more precise)
+        
+        Returns:
+            RiskAssessment with highlighted violations in context
+        """
+        logger.info(f"Analyzing {document_type} document ({len(document_text)} characters)")
+        
+        # Split document into paragraphs for reference
+        paragraphs = [p.strip() for p in document_text.split('\n\n') if p.strip()]
+        
+        # Create enhanced scenario description
+        scenario = f"""Analyze this {document_type} document for GDPR compliance:
+
+{document_text}
+
+For each violation found, quote the EXACT problematic text from the document above."""
+        
+        # Perform standard analysis
+        assessment = self.analyze_scenario(scenario, context_type=document_type)
+        
+        # Enhance violations with paragraph references
+        for violation in assessment.violations:
+            if violation.highlighted_text:
+                # Find which paragraph contains this text
+                for i, para in enumerate(paragraphs, 1):
+                    if violation.highlighted_text.strip() in para:
+                        if not violation.verification_notes:
+                            violation.verification_notes = ""
+                        violation.verification_notes += f"\n📍 Found in paragraph {i} of the document."
+                        break
+        
+        return assessment
 
 
 if __name__ == "__main__":
